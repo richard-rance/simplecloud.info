@@ -30,15 +30,38 @@ info:
 
     # Key Terms
 
-    Service Provider - The application that implements some or all of these API endpoints
+    ## Service Provider
+          An HTTP web application that provides identity information via the
+          SCIM protocol.
 
-    Client - The application that calls these API endpoints
+    ## Client
+          A website or application that uses the SCIM protocol to manage
+          identity data maintained by the service provider.  The client
+          initiates SCIM HTTP requests to a target service provider.
 
-    Message - The body of a request or response
+    ## Provisioning Domain
+          A provisioning domain is an administrative domain external to the
+          domain of a service provider for legal or technical reasons.  For
+          example, a SCIM client in an enterprise (provisioning client)
+          communicates with a SCIM service provider that is owned or
+          controlled by a different legal entity.
 
-    Resource - A singular record of data made up of the common attributes, its base schema and any extension schemas. Service providers may define their own additional resource types.
+    ## Resource Type
+          A type of a resource that is managed by a service provider.  The
+          resource type defines the resource name, endpoint URL, schemas,
+          and other metadata that indicate where a resource is managed and
+          how it is composed, e.g., "User" or "Group".
 
-    Schema - A set of attributes (fields) that a resource or message can contain.
+    ## Resource
+        An artifact that is managed by a service provider and that
+        contains one or more attributes, e.g., "User" or "Group".
+    A singular record of data made up of the common attributes, its base schema and any extension schemas. 
+
+    ## Message
+    The body of an HTTP request or response
+
+    ## Schema
+    A set of attributes (fields) that a resource or message can contain.
 
     # Processing Rules
 
@@ -73,6 +96,20 @@ info:
      (PRECIS) preparation and comparison rules described in Sections 3 and
      4, respectively, of [RFC7613], which is based on the PRECIS framework
      specification [RFC7564].
+     
+     # Custom Resources & Schemas
+
+    Service providers may define additional resource types and schemas. They should avoid
+    redefining ones that already exist and follow established conventions.
+
+    There are a few well defined schema prefixes:
+    - `urn:ietf:params:scim:api` - Defined in an RFC. The schema of special API requests and response bodies
+    - `urn:ietf:params:scim:schemas:core` - Defined in an RFC. The base set of fields for resources
+    - `urn:ietf:params:scim:schemas:extensions` - Additional fields
+
+    For private additions it is suggested to use one of these formats:
+    - `urn:ietf:params:scim:schemas:{company or industry}:{other details}`
+    - `urn:ietf:params:scim:schemas:extensions:{company or industry}:{other details}` 
 servers:
   - url: 'https://example.com/scim/v2'
   - url: 'https://example.com/scim'
@@ -94,7 +131,12 @@ components:
           - application/scim+json
           - application/json
         example: application/scim+json
-      description: Indicates that the request body contains content formated according to SCIM rules
+      description: |-
+        Indicates that the request body contains content formated according to SCIM rules
+
+        Note [rfc7644#section-3.8](https://www.rfc-editor.org/rfc/rfc7644#section-3.8) mentions that `.scim` 
+        may be added to the end of URIs instead however using URIs for content negoation may interfear with 
+        adding future resouce actions like `.search`
     Accept:
       name: Accept
       in: header
@@ -178,7 +220,30 @@ components:
           - filter=userType eq "Employee" and (emails.type eq "work")
           - 'filter=userType eq "Employee" and emails[type eq "work" and value co "@example.com"]'
           - 'filter=emails[type eq "work" and value co "@example.com"] or ims[type eq "xmpp" and value co "@foo.com"]'
-      description: 'Filtering is an OPTIONAL parameter for SCIM service providers.    Clients MAY discover service provider filter capabilities by looking    at the "filter" attribute of the "ServiceProviderConfig" endpoint    (see Section 4).  Clients MAY request a subset of resources by    specifying the "filter" query parameter containing a filter    expression.  When specified, only those resources matching the filter    expression SHALL be returned.  The expression language that is used    with the filter parameter supports references to attributes and    literals.     Attribute names and attribute operators used in filters are case    insensitive.  For example, the following two expressions will    evaluate to the same logical value:     filter=userName Eq "john"     filter=Username eq "john"     The filter parameter MUST contain at least one valid expression (see    Table 3).  Each expression MUST contain an attribute name followed by    an attribute operator and optional value.  Multiple expressions MAY    be combined using logical operators (see Table 4).  Expressions MAY    be grouped together using round brackets "(" and ")" (see Table 5).'
+      description: |-
+        Filtering is an OPTIONAL parameter for SCIM service providers.
+
+        [rfc7644#section-7.5.2](https://www.rfc-editor.org/rfc/rfc7644#section-7.5.2) state the following however most systems ignore it
+        > Servers that receive HTTP GET requests using filters that contain
+        > sensitive or confidential personal information SHOULD respond with
+        > HTTP status code 403 to indicate that the operation is forbidden.  A
+        > "scimType" error code of "sensitive" may be returned to indicate that
+        > the request must be submitted using POST.
+
+        Clients MAY discover service provider filter capabilities by looking
+        at the "filter" attribute of the "ServiceProviderConfig" endpoint
+        (see Section 4).  Clients MAY request a subset of resources by
+        specifying the "filter" query parameter containing a filter
+        expression.  When specified, only those resources matching the filter
+        expression SHALL be returned.  The expression language that is used
+        with the filter parameter supports references to attributes and literals.
+        Attribute names and attribute operators used in filters are case insensitive.
+        For example, the following two expressions will evaluate to the same logical value:     
+        `filter=userName Eq "john"` and `filter=Username eq "john"`
+
+        The filter parameter MUST contain at least one valid expression (see Table 3).  
+        Each expression MUST contain an attribute name followed by an attribute operator and optional value.  Multiple expressions MAY    
+        be combined using logical operators (see Table 4).  Expressions MAY be grouped together using round brackets "(" and ")" (see Table 5).'
     sortBy:
       name: sortBy
       in: query
@@ -230,6 +295,13 @@ components:
         maximum number of       
         results is set by the   
         service provider.   
+    If-Match:
+      name: If-Match
+      in: header
+      required: false
+      schema:
+        type: string
+      description: It is optional for service providers to support ETags. If supported clients may send the ETag value they recived previously in the If-Match header to prevent accientally overwritting changes made by another system.
   headers:
     ETag:
       required: false
@@ -267,7 +339,60 @@ components:
       description: Indicates that the response body contains content formated according to SCIM rules
   examples: {}
   schemas:
-    SchemaSearchRequest:
+    MessageListResponse:
+      type: object
+      description: |-
+        All seach requests should return a response with this format.
+
+        When not all resources matching the filter criteria can be returned due to paging
+        the next page can be obtained by adding the `startIndex` to the `itemsPerPage` to get the value to use as the new `startIndex` query param when making the next request.
+
+        Cursor based paging may be added in the future by following [draft-peterson-scim-cursor-pagination](https://datatracker.ietf.org/doc/draft-peterson-scim-cursor-pagination/).
+      title: 'api:messages:2.0:ListResponse'
+      properties:
+        schemas:
+          type: array
+          items:
+            type: string
+            default: 'urn:ietf:params:scim:api:messages:2.0:ListResponse'
+            enum:
+              - 'urn:ietf:params:scim:api:messages:2.0:ListResponse'
+        Resources:
+          type: array
+          description: |-
+            A multi-valued list of complex objects containing the
+                  requested resources.  This MAY be a subset of the full set of
+                  resources if pagination (Section 3.4.2.4) is requested.  REQUIRED
+                  if "totalResults" is non-zero.
+          items:
+            type: object
+        totalResults:
+          type: integer
+          description: |-
+            The total number of results returned by the list or
+                  query operation.  The value may be larger than the number of
+                  resources returned, such as when returning a single page (see
+                  Section 3.4.2.4) of results where multiple pages are available.
+                  REQUIRED.
+        startIndex:
+          type: integer
+          minimum: 1
+          description: |-
+            The 1-based index of the first result in the current set
+                  of list results.  REQUIRED when partial results are returned due
+                  to pagination.
+        itemsPerPage:
+          type: integer
+          description: |-
+            The number of resources returned in a list response
+                  page.  REQUIRED when partial results are returned due to
+                  pagination.
+      required:
+        - Resources
+        - totalResults
+      x-stoplight:
+        id: b11e844160d23
+    MessageSearchRequest:
       type: object
       x-examples:
         Example 1:
@@ -339,71 +464,181 @@ components:
             An integer indicating the desired maximum number of query
                   results per page.  See Section 3.4.2.4.  OPTIONAL.
       x-stoplight:
-        id: 66dd9b8c8b229
-      title: Schema - Search Request
-    SchemaListResponse:
+        id: ace229e9d0312
+      title: 'api:messages:2.0:SearchRequest'
+    MessagePatchOp:
       type: object
-      x-examples:
-        Example 1:
-          schemas:
-            - 'urn:ietf:params:scim:api:messages:2.0:SchemaSchemaListResponse'
-          totalResults: 2
-          Resources:
-            - id: 2819c223-7f76-453a-919d-413861904646
-              userName: bjensen
-            - id: c75ad752-64ae-4823-840d-ffa80929976c
-              userName: jsmith
-      description: |-
-        All seach requests should return a response with this format.
+      examples: []
+      properties:
+        schemas:
+          type: object
+          properties:
+            schemas:
+              type: array
+              items:
+                type: string
+                enum:
+                  - 'urn:ietf:params:scim:api:messages:2.0:PatchOp'
+                default: 'urn:ietf:params:scim:api:messages:2.0:PatchOp'
+            Operations:
+              type: array
+              items:
+                type: object
+                properties:
+                  op:
+                    type: string
+                    enum:
+                      - add
+                      - remove
+                      - replace
+                    description: Tha action to be taken on the data at the path
+                  path:
+                    type: string
+                    description: |-
+                      The "path" attribute value is a String containing an attribute path
+                      describing the target of the operation.  The "path" attribute is
+                      OPTIONAL for "add" and "replace" and is REQUIRED for "remove"
+                      operations.  
 
-        When not all resources matching the filter criteria can be returned due to paging
-        the next page can be obtained by adding the `startIndex` to the `itemsPerPage` to get the value to use as the new `startIndex` query param when making the next request.
-
-        Cursor based paging may be added in the future by following [draft-peterson-scim-cursor-pagination](https://datatracker.ietf.org/doc/draft-peterson-scim-cursor-pagination/).
-      title: Schema - List Response
+                      If no path is specified, value is assumed to be an object with all attributes applied at the root level.
+                    examples:
+                      - members
+                      - name.familyName
+                      - 'addresses[type eq "work"]'
+                      - 'members[value eq "2819c223-7f76-453a-919d-413861904646"]'
+                      - 'members[value eq "2819c223-7f76-453a-919d-413861904646"].displayName'
+                  value:
+                    type:
+                      - string
+                      - boolean
+                      - number
+                      - array
+                      - object
+                      - integer
+                    description: The value will be whatever datatype is appropriate for the path
+                required:
+                  - op
+          required:
+            - schemas
+            - Operations
+      title: 'api:messages:2.0:PatchOp'
+      x-stoplight:
+        id: e68c1ea2a9146
+    MessageBulkRequest:
+      allOf:
+        - $ref: '#/components/schemas/CommonBulkAttributes'
+        - type: object
+          properties:
+            schemas:
+              type: array
+              items:
+                type: string
+                enum:
+                  - 'urn:ietf:params:scim:api:messages:2.0:BulkRequest'
+                default: 'urn:ietf:params:scim:api:messages:2.0:BulkRequest'
+      title: 'api:messages:2.0:BulkRequest'
+      x-stoplight:
+        id: a5f6b0f82d4fd
+    MessageBulkResponse:
+      allOf:
+        - $ref: '#/components/schemas/CommonBulkAttributes'
+        - type: object
+          properties:
+            schemas:
+              type: array
+              items:
+                type: string
+                enum:
+                  - 'urn:ietf:params:scim:api:messages:2.0:BulkResponse'
+                default: 'urn:ietf:params:scim:api:messages:2.0:BulkResponse'
+            Operations:
+              type: array
+              items:
+                type: object
+                properties:
+                  location:
+                    type: string
+                    description: |-
+                      The resource endpoint URL.  REQUIRED in a response,
+                              except in the event of a POST failure.
+                  response:
+                    type: string
+                    description: |-
+                      The HTTP response body for the specified request
+                               operation.  When indicating a response with an HTTP status
+                               other than a 200-series response, the response body MUST be
+                               included.  For normal completion, the server MAY elect to omit
+                               the response body.
+                  status:
+                    type: string
+                    description: |
+                      The HTTP response status code for the requested operation.
+                               When indicating an error, the "response" attribute MUST contain
+                               the detail error response as per Section 3.12.
+      title: 'api:messages:2.0:BulkResponse'
+      x-stoplight:
+        id: ebb83333cdb06
+    MessageError:
+      title: 'api:messages:2.0:Error'
+      x-stoplight:
+        id: zon0d9si6ldkw
+      type: object
       properties:
         schemas:
           type: array
+          description: Documents that the error response contains the core error message attributes
           items:
             type: string
-            default: 'urn:ietf:params:scim:api:messages:2.0:ListResponse'
             enum:
-              - 'urn:ietf:params:scim:api:messages:2.0:ListResponse'
-        Resources:
-          type: array
-          description: |-
-            A multi-valued list of complex objects containing the
-                  requested resources.  This MAY be a subset of the full set of
-                  resources if pagination (Section 3.4.2.4) is requested.  REQUIRED
-                  if "totalResults" is non-zero.
-          items:
-            type: object
-        totalResults:
-          type: integer
-          description: |-
-            The total number of results returned by the list or
-                  query operation.  The value may be larger than the number of
-                  resources returned, such as when returning a single page (see
-                  Section 3.4.2.4) of results where multiple pages are available.
-                  REQUIRED.
-        startIndex:
-          type: integer
-          minimum: 1
-          description: |-
-            The 1-based index of the first result in the current set
-                  of list results.  REQUIRED when partial results are returned due
-                  to pagination.
-        itemsPerPage:
+              - 'urn:ietf:params:scim:api:messages:2.0:Error'
+            default: 'urn:ietf:params:scim:api:messages:2.0:Error'
+        status:
           type: string
           description: |-
-            The number of resources returned in a list response
-                  page.  REQUIRED when partial results are returned due to
-                  pagination.
+            The HTTP status code that represents the error.
+
+            | Status                      | Applicability                 | Suggested Explanation                                                                                                                                                                                                                                       |
+            |-----------------------------|-------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+            | 307 (Temporary Redirect)    | GET, POST, PUT, PATCH, DELETE | The client is directed to repeat the same HTTP request at the location identified.  The client SHOULD NOT use the location provided in the response as a permanent reference to the resource and SHOULD continue to use the original request URI [RFC7231]. |
+            | 308 (Permanent Redirect)    | GET, POST, PUT, PATCH, DELETE | The client is directed to repeat the same HTTP request at the location identified.  The client SHOULD use the location provided in the response as the permanent reference to the resource [RFC7538].                                                       |
+            | 400 (Bad Request)           | GET, POST, PUT, PATCH, DELETE | Request is unparsable, syntactically incorrect, or violates schema.                                                                                                                                                                                         |
+            | 401 (Unauthorized)          | GET, POST, PUT, PATCH, DELETE | Authorization failure.  The authorization header is invalid or missing.                                                                                                                                                                                     |
+            | 403 (Forbidden)             | GET, POST, PUT, PATCH, DELETE | Operation is not permitted based on the supplied authorization.                                                                                                                                                                                             |
+            | 404 (Not Found)             | GET, POST, PUT, PATCH, DELETE | Specified resource (e.g., User) or endpoint does not exist.                                                                                                                                                                                                 |
+            | 409 (Conflict)              | POST, PUT, PATCH, DELETE      | The specified version number does not match the resource's latest version number, or a service provider refused to create a new, duplicate resource.                                                                                                        |
+            | 412 (Precondition Failed)   | PUT, PATCH, DELETE            | Failed to update.  Resource has changed on the server.                                                                                                                                                                                                      |
+            | 413 (Payload Too Large)     | POST                          | {"maxOperations": 1000,"maxPayloadSize": 1048576}                                                                                                                                                                                                           |
+            | 500 (Internal Server Error) | GET, POST, PUT, PATCH, DELETE | An internal error.  Implementers SHOULD provide descriptive debugging advice.                                                                                                                                                                               |
+            | 501 (Not Implemented)       | GET, POST, PUT, PATCH, DELETE | Service provider does not support the request operation, e.g., PATCH.                                                                                                                                                                                       |
+          pattern: '^[2-5][0-9][0-9]$'
+          example: '400'
+        scimType:
+          type: string
+          description: |-
+            The status field is used to documment a more specific error category than the HTTP status codes support. For status code 400 there is a list of predefined options. Implementations may add additional ones.
+
+            | scimType             | Description                                                                                                                                                                                                                                             | Applicability                                                                                     |   |   |
+            |----------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------|---|---|
+            | invalidFilter        | The specified filter syntax was invalid (does not comply with Figure 1), or the specified attribute and filter comparison combination is not supported.                                                                                                 | GET (Section 3.4.2), POST (Search - Section 3.4.3), PATCH (Path Filter - Section 3.5.2)           |   |   |
+            | tooMany              | The specified filter yields many more results than the server is willing to calculate or process.  For example a filter such as "(userName pr)" by itself would return all entries with a "userName" and MAY not be acceptable to the service provider. | GET (Section 3.4.2), POST (Search - Section 3.4.3)                                                |   |   |
+            | uniqueness           | One or more of the attribute values are already in use or are reserved.                                                                                                                                                                                 | POST (Create - Section 3.3), PUT (Section 3.5.1), PATCH (Section 3.5.2)                           |   |   |
+            | mutability           | The attempted modification is not compatible with the target attribute's mutability or current state (e.g. modification of an "immutable" attribute with an existing value).                                                                            | PUT (Section 3.5.1), PATCH (Section 3.5.2)                                                        |   |   |
+            | invalidSyntax        | The request body message structure was invalid or did not conform to the request schema.                                                                                                                                                                | POST (Search - Section 3.4.3, Create - Section 3.3, Bulk - Section 3.7), PUT (Section 3.5.1)      |   |   |
+            | invalidPath noTarget | The `path` attribute was invalid or malformed (see Figure 7).                                                                                                                                                                                           | PATCH (Section 3.5.2)                                                                             |   |   |
+            | noTarget             | The specified "path" did not yield an attribute or attribute value that could be operated on.  This occurs when the specified "path" value contains a filter that yields no match.                                                                      | PATCH (Section 3.5.2)                                                                             |   |   |
+            | invalidValue         | A required value was missing, or the value specified was not compatible with the operation or attribute type (see Section 2.2 of [RFC7643]), or resource schema (see Section 4 of [RFC7643]).                                                           | GET (Section 3.4.2), POST (Create - Section 3.3, PATCH (Section 3.5.2)                            |   |   |
+            | invalidVers          | The specified SCIM protocol version is not supported (see Section 3.13).                                                                                                                                                                                | GET (Section 3.4.2), POST (ALL), PUT (Section 3.5.1), PATCH (Section 3.5.2), DELETE (Section 3.6) |   |   |
+            | sensitive            | The specified request cannot be completed, due to the passing of sensitive (e.g., personal) information in a request URI.  For example, personal information SHALL NOT be transmitted over request URIs.  See Section 7.5.2.                            | GET (Section 3.4.2)                                                                               |   |   |
+          example: invalidFilter
+        detail:
+          type: string
+          description: A detailed human-readable message.  OPTIONAL.
+          example: Here is how you can fix your error
       required:
-        - Resources
-        - totalResults
+        - schemas
+        - status
     CommonResourceAttributes:
-      title: Common Resource Attributes
+      title: Common - Resource Attributes
       x-stoplight:
         id: 9sqf7w852p8c7
       type: object
@@ -418,7 +653,7 @@ components:
            service provider.  Common attributes are considered to be part of
            every base resource schema and do not use their own "schemas" URI.
       properties:
-        schema:
+        schemas:
           type: array
           description: |-
             contains a list of one or more URIs that
@@ -427,6 +662,7 @@ components:
                what attributes are defined within a schema MAY be obtained by
                querying a SCIM service provider's "/Schemas" endpoint for a schema
                definition (see Section 8.7 of [RFC7643])
+          minItems: 1
           items:
             type: string
         id:
@@ -530,6 +766,73 @@ components:
               readOnly: true
       required:
         - id
+    CommonBulkAttributes:
+      title: Common - Bulk Attributes
+      x-stoplight:
+        id: 17y03dbyeisnu
+      type: object
+      properties:
+        schemas:
+          type: array
+          items:
+            type: string
+        failOnErrors:
+          type: integer
+          description: |-
+            An integer specifying the number of errors that the service
+                  provider will accept before the operation is terminated and an
+                  error response is returned.  OPTIONAL in a request.  Not valid in
+                  a response.
+        Operations:
+          type: array
+          description: |-
+            Defines operations within a bulk job.  Each operation corresponds
+                  to a single HTTP request against a resource endpoint.  REQUIRED.
+          items:
+            type: object
+            properties:
+              method:
+                type: string
+                description: The HTTP method of the current operation.
+                enum:
+                  - POST
+                  - PUT
+                  - PATCH
+                  - DELETE
+              bulkId:
+                type: string
+                description: |-
+                  The transient identifier of a newly created resource,
+                           unique within a bulk request and created by the client.  The
+                           bulkId serves as a surrogate resource id enabling clients to
+                           uniquely identify newly created resources in the response and
+                           cross-reference new resources in and across operations within a
+                           bulk request.  REQUIRED when "method" is "POST".
+              version:
+                type: string
+                description: |-
+                  The current resource version.  Version MAY be used if the
+                           service provider supports entity-tags (ETags) (Section 2.3 of
+                           [RFC7232]) and "method" is "PUT", "PATCH", or "DELETE".
+              path:
+                type: string
+                description: |-
+                  The resource's relative path to the SCIM service provider's
+                           root.  If "method" is "POST", the value must specify a resource
+                           type endpoint, e.g., /Users or /Groups, whereas all other
+                           "method" values must specify the path to a specific resource,
+                           e.g., /Users/2819c223-7f76-453a-919d-413861904646.  REQUIRED in
+                           a request.
+              data:
+                type: string
+                description: |-
+                  The resource data as it would appear for a single SCIM POST,
+                           PUT, or PATCH operation.  REQUIRED in a request when "method"
+                           is "POST", "PUT", or "PATCH".
+            required:
+              - method
+      required:
+        - Operations
     DefaultMultiValueAttributes:
       title: Default Sub-Attributes for Multi Value Attributes
       x-stoplight:
@@ -581,7 +884,7 @@ components:
             "https://example.com/v2/Users/12345".
           example: 'https://example.com/v2/Users/12345'
     SchemaUserCore:
-      title: Schema - Core User
+      title: 'schemas:core:2.0:User'
       x-stoplight:
         id: v26wkxsfqrmhs
       type: object
@@ -953,7 +1256,7 @@ components:
       required:
         - userName
     SchemaUserEnterprise:
-      title: Schema - Enterprise User
+      title: 'schemas:extension:enterprise:2.0:User'
       x-stoplight:
         id: 2c38f935be5f4
       type: object
@@ -1017,17 +1320,569 @@ components:
         - $ref: '#/components/schemas/SchemaUserEnterprise'
         - type: object
           properties:
-            schema:
+            schemas:
               type: array
               example:
                 - 'urn:ietf:params:scim:schemas:core:2.0:User'
                 - 'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'
               items:
                 type: string
-      description: 'Each resource is comprised of the common attributes, a base schema where the attributes are at the root level and an unlimited number of extensions schemas where the extension attributes are nested within the extension schema id. The schema id for the base and all entensions used must be listed in the schema attribute.'
-      title: Resource - User with enterprise extension
+      title: Resource - User
+      description: |-
+        The complete user resource is made up of the common resource attributes 
+        and the `urn:ietf:params:scim:schemas:core:2.0:User` attributes.
+        This documentation shows the optional `urn:ietf:params:scim:schemas:extension:enterprise:2.0:User` added in.
+    SchemaGroupCore:
+      title: 'schemas:core:2.0:Group'
       x-stoplight:
-        id: a8ef53fb244e9
+        id: qpyos04t4sh5o
+      type: object
+      description: |-
+        SCIM provides a schema for representing groups, identified using the
+           following schema URI: "urn:ietf:params:scim:schemas:core:2.0:Group".
+
+           "Group" resources are meant to enable expression of common
+           group-based or role-based access control models, although no explicit
+           authorization model is defined.  It is intended that the semantics of
+           group membership, and any behavior or authorization granted as a
+           result of membership, are defined by the service provider; these are
+           considered out of scope for this specification.
+      properties:
+        displayName:
+          type: string
+          description: A human-readable name for the Group.  REQUIRED.
+        members:
+          type: array
+          description: |-
+            A list of members of the Group.  While values MAY be added or
+            removed, sub-attributes of members are "immutable".
+
+            The "value" sub-attribute contains the value of an "id" attribute of a SCIM
+            resource, and the "$ref" sub-attribute must be the URI of a SCIM
+            resource such as a "User", or a "Group".  The intention of the
+            "Group" type is to allow the service provider to support nested
+            groups.
+
+            Service providers MAY require clients to provide a
+            non-empty value by setting the "required" attribute characteristic
+            of a sub-attribute of the "members" attribute in the "Group"
+            resource schema.
+          items:
+            type: object
+            properties:
+              value:
+                type: string
+                description: The id of the resource (ex group or user)
+                readOnly: true
+              $ref:
+                type: string
+                description: The URL to the user or group that is a member
+                readOnly: true
+              display:
+                type: string
+                description: 'A human-readable name, primarily used for display purposes and having a mutability of "immutable"'
+                readOnly: true
+      required:
+        - displayName
+    ResourceGroup:
+      allOf:
+        - $ref: '#/components/schemas/CommonResourceAttributes'
+        - $ref: '#/components/schemas/SchemaGroupCore'
+        - type: object
+          properties:
+            schemas:
+              type: array
+              example:
+                - 'urn:ietf:params:scim:schemas:core:2.0:Group'
+              items:
+                type: string
+      title: Resource - Group
+    SchemaServiceProviderConfig:
+      type: object
+      x-examples:
+        Example 1:
+          schemas:
+            - 'urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig'
+          documentationUri: 'http://example.com/help/scim.html'
+          patch:
+            supported: true
+          bulk:
+            supported: true
+            maxOperations: 1000
+            maxPayloadSize: 1048576
+          filter:
+            supported: true
+            maxResults: 200
+          changePassword:
+            supported: true
+          sort:
+            supported: true
+          etag:
+            supported: true
+          authenticationSchemes:
+            - name: OAuth Bearer Token
+              description: Authentication scheme using the OAuth Bearer Token Standard
+              specUri: 'http://www.rfc-editor.org/info/rfc6750'
+              documentationUri: 'http://example.com/help/oauth.html'
+              type: oauthbearertoken
+              primary: true
+            - name: HTTP Basic
+              description: Authentication scheme using the HTTP Basic Standard
+              specUri: 'http://www.rfc-editor.org/info/rfc2617'
+              documentationUri: 'http://example.com/help/httpBasic.html'
+              type: httpbasic
+          meta:
+            location: 'https://example.com/v2/ServiceProviderConfig'
+            resourceType: ServiceProviderConfig
+            created: '2010-01-23T04:56:22Z'
+            lastModified: '2011-05-13T04:42:34Z'
+            version: W/"3694e05e9dff594"
+      description: |-
+        SCIM provides a schema for representing the service provider's
+           configuration, identified using the following schema URI:
+           "urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig".
+
+           The service provider configuration resource enables a service
+           provider to discover SCIM specification features in a standardized
+           form as well as provide additional implementation details to clients.
+           All attributes have a mutability of "readOnly".  Unlike other core
+           resources, the "id" attribute is not required for the service
+           provider configuration resource.
+      title: 'schemas:core:2.0:ServiceProviderConfig'
+      properties:
+        schemas:
+          type: array
+          description: |-
+            An HTTP-addressable URL pointing to the service provider's
+                  human-consumable help documentation.  OPTIONAL.
+          items:
+            type: string
+            default: 'urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig'
+            enum:
+              - 'urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig'
+        documentationUri:
+          type: string
+        patch:
+          type: object
+          required:
+            - supported
+          properties:
+            supported:
+              type: boolean
+              description: A Boolean value specifying whether or not the operation is supported.  REQUIRED.
+        bulk:
+          type: object
+          required:
+            - supported
+            - maxOperations
+            - maxPayloadSize
+          properties:
+            supported:
+              type: boolean
+              description: |-
+                A Boolean value specifying whether or not the operation
+                         is supported
+            maxOperations:
+              type: integer
+              description: |-
+                An integer value specifying the maximum number of
+                         operations.  REQUIRED.
+            maxPayloadSize:
+              type: integer
+              description: |-
+                An integer value specifying the maximum payload
+                         size in bytes.  REQUIRED.
+        filter:
+          type: object
+          required:
+            - supported
+            - maxResults
+          properties:
+            supported:
+              type: boolean
+            maxResults:
+              type: integer
+        changePassword:
+          type: object
+          required:
+            - supported
+          properties:
+            supported:
+              type: boolean
+        sort:
+          type: object
+          required:
+            - supported
+          properties:
+            supported:
+              type: boolean
+        etag:
+          type: object
+          required:
+            - supported
+          properties:
+            supported:
+              type: boolean
+        authenticationSchemes:
+          type: array
+          description: |-
+            specifies supported
+                  authentication scheme properties.  To enable seamless discovery of
+                  configurations, the service provider SHOULD, with the appropriate
+                  security considerations, make the authenticationSchemes attribute
+                  publicly accessible without prior authentication.  REQUIRED.
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+                description: |-
+                  The authentication scheme.  This specification defines the
+                           values "oauth", "oauth2", "oauthbearertoken", "httpbasic", and
+                           "httpdigest".  REQUIRED.
+                enum:
+                  - oauth
+                  - oauth2
+                  - oauthbearertoken
+                  - httpbasic
+                  - httpdigest
+              name:
+                type: string
+                description: |-
+                  The common authentication scheme name, e.g., HTTP Basic.
+                           REQUIRED.
+              description:
+                type: string
+                description: |-
+                  A description of the authentication scheme.
+                           REQUIRED.
+              specUri:
+                type: string
+                description: An HTTP-addressable URL pointing to the authentication       scheme's specification.  OPTIONAL.
+              documentationUri:
+                type: string
+                description: |-
+                  An HTTP-addressable URL pointing to the
+                           authentication scheme's usage documentation.  OPTIONAL.
+              primary:
+                type: boolean
+            required:
+              - type
+              - name
+              - description
+        meta:
+          type: object
+          properties:
+            location:
+              type: string
+            resourceType:
+              type: string
+            created:
+              type: string
+            lastModified:
+              type: string
+            version:
+              type: string
+      required:
+        - schemas
+        - patch
+        - bulk
+        - filter
+        - changePassword
+        - sort
+        - etag
+        - authenticationSchemes
+    ResourceResourceType:
+      description: |
+        The "ResourceType" schema specifies the metadata about a resource
+          type.  Resource type resources are READ-ONLY and identified using the
+          following schema URI:
+          "urn:ietf:params:scim:schemas:core:2.0:ResourceType".  Unlike other
+          core resources, all attributes are REQUIRED unless otherwise
+          specified.  The "id" attribute is not required for the resource type
+          resource.
+      title: 'schemas:core:2.0:ResourceType'
+      type: object
+      properties:
+        schemas:
+          type: array
+          items:
+            type: string
+            default: 'urn:ietf:params:scim:schemas:core:2.0:ResourceType'
+            enum:
+              - 'urn:ietf:params:scim:schemas:core:2.0:ResourceType'
+        id:
+          type: string
+          description: |-
+            The resource type's server unique id.  This is often the same
+                  value as the "name" attribute.  OPTIONAL.
+        name:
+          type: string
+          description: |-
+            The resource type name.  When applicable, service providers MUST
+                  specify the name, e.g., "User" or "Group".  This name is
+                  referenced by the "meta.resourceType" attribute in all resources.
+                  REQUIRED.
+        description:
+          type: string
+          description: |-
+            The resource type's human-readable description.  When applicable,
+                  service providers MUST specify the description.  OPTIONAL.
+        endpoint:
+          type: string
+          description: |-
+            The resource type's HTTP-addressable endpoint relative to the Base
+                  URL of the service provider, e.g., "Users".  REQUIRED.
+        schema:
+          type: string
+          description: |-
+            The resource type's primary/base schema URI, e.g.,
+                  "urn:ietf:params:scim:schemas:core:2.0:User".  This MUST be equal
+                  to the "id" attribute of the associated "Schema" resource.
+                  REQUIRED.
+        schemaExtensions:
+          type: array
+          description: |-
+            A list of URIs of the resource type's schema extensions.
+                  OPTIONAL.
+          items:
+            type: object
+            properties:
+              schema:
+                type: string
+                description: |-
+                  The URI of an extended schema, e.g., "urn:edu:2.0:Staff".
+                          This MUST be equal to the "id" attribute of a "Schema"
+                          resource.  REQUIRED.
+              required:
+                type: boolean
+                description: |-
+                  A Boolean value that specifies whether or not the schema
+                          extension is required for the resource type.  If true, a
+                          resource of this type MUST include this schema extension and
+                          also include any attributes declared as required in this schema
+                          extension.  If false, a resource of this type MAY omit this
+                          schema extension.  REQUIRED.
+            required:
+              - schema
+              - required
+        meta:
+          type: object
+          properties:
+            location:
+              type: string
+            resourceType:
+              type: string
+              example: ResourceType
+      required:
+        - schemas
+        - name
+        - description
+        - endpoint
+        - schema
+    ResourceSchema:
+      title: 'schema:core:2.0:Schema'
+      x-stoplight:
+        id: unazswsqjjclk
+      type: object
+      description: |-
+        This section defines a way to specify the schema in use by resources
+           available and accepted by a SCIM service provider.  For each
+           "schemas" URI value, this schema specifies the defined attribute(s)
+           and their characteristics (mutability, returnability, etc).  For
+           every schema URI used in a resource object, there is a corresponding
+           "Schema" resource.  "Schema" resources are not modifiable, and their
+           associated attributes have a mutability of "readOnly".  Except for
+           "id" (which is always returned), all attributes have a "returned"
+           characteristic of "default".  Unless otherwise specified, all schema
+           attributes are case insensitive.  These resources have a "schemas"
+           attribute with the following schema URI:
+
+           urn:ietf:params:scim:schemas:core:2.0:Schema
+
+           Unlike other core resources, the "Schema" resource MAY contain a
+           complex object within a sub-attribute, and all attributes are
+           REQUIRED unless otherwise specified.
+      properties:
+        schemas:
+          type: array
+          items:
+            type: string
+            default: 'urn:ietf:params:scim:schemas:core:2.0:Schema'
+            enum:
+              - 'urn:ietf:params:scim:schemas:core:2.0:Schema'
+        id:
+          type: string
+          description: |-
+            The unique URI of the schema.  When applicable, service providers
+                  MUST specify the URI, e.g.,
+                  "urn:ietf:params:scim:schemas:core:2.0:User".  Unlike most other
+                  schemas, which use some sort of Globally Unique Identifier (GUID)
+                  for the "id", the schema "id" is a URI so that it can be
+                  registered and is portable between different service providers and
+                  clients.  REQUIRED.
+        name:
+          type: string
+          description: |-
+            The schema's human-readable name.  When applicable, service
+                  providers MUST specify the name, e.g., "User" or "Group".
+                  OPTIONAL.
+        description:
+          type: string
+          description: |-
+            The schema's human-readable description.  When applicable, service
+                  providers MUST specify the description.  OPTIONAL.
+        attributes:
+          type: array
+          description: |-
+            A complex type that defines service provider attributes and their
+                  qualities
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+                description: |
+                  The attribute's name.
+              type:
+                type: string
+                description: |-
+                  The attribute's data type.  Valid values are "string",
+                           "boolean", "decimal", "integer", "dateTime", "reference", and
+                           "complex".  When an attribute is of type "complex", there
+                           SHOULD be a corresponding schema attribute "subAttributes"
+                           defined, listing the sub-attributes of the attribute.
+              subAttributes:
+                type: array
+                description: |-
+                  When an attribute is of type "complex",
+                           "subAttributes" defines a set of sub-attributes.
+                           "subAttributes" has the same schema sub-attributes as
+                           "attributes".
+                items:
+                  type: object
+              multiValued:
+                type: boolean
+                description: A Boolean value indicating the attribute's plurality.
+              description:
+                type: string
+                description: |-
+                  The attribute's human-readable description.  When
+                           applicable, service providers MUST specify the description.
+              required:
+                type: boolean
+                description: |-
+                  A Boolean value that specifies whether or not the
+                           attribute is required.
+              canonicalValues:
+                type: array
+                description: |-
+                  A collection of suggested canonical values that
+                           MAY be used (e.g., "work" and "home").  In some cases, service
+                           providers MAY choose to ignore unsupported values.  OPTIONAL.
+                items: {}
+              caseExact:
+                type: boolean
+                description: |-
+                  A Boolean value that specifies whether or not a string
+                           attribute is case sensitive.  The server SHALL use case
+                           sensitivity when evaluating filters.  For attributes that are
+                           case exact, the server SHALL preserve case for any value
+                           submitted.  If the attribute is case insensitive, the server
+                           MAY alter case for a submitted value.  Case sensitivity also
+                           impacts how attribute values MAY be compared against filter
+                           values (see Section 3.4.2.2 of [RFC7644]).
+              mutability:
+                type: string
+                description: |-
+                  A single keyword indicating the circumstances under
+                  which the value of the attribute can be (re)defined:
+
+                  `readOnly` - The attribute SHALL NOT be modified.
+
+                  `readWrite` - The attribute MAY be updated and read at any time.
+                    This is the default value.
+
+                  `immutable` - The attribute MAY be defined at resource creation
+                    (e.g., POST) or at record replacement via a request (e.g., a
+                    PUT).  The attribute SHALL NOT be updated.
+
+                  `writeOnly` - The attribute MAY be updated at any time.  Attribute
+                    values SHALL NOT be returned (e.g., because the value is a
+                    stored hash).  Note: An attribute with a mutability of
+                    "writeOnly" usually also has a returned setting of "never".
+              returned:
+                type: string
+                description: |-
+                  A single keyword that indicates when an attribute and
+                  associated values are returned in response to a GET request or
+                  in response to a PUT, POST, or PATCH request.  Valid keywords
+                  are as follows:
+
+                  `always` - The attribute is always returned, regardless of the
+                      contents of the "attributes" parameter.  For example, "id"
+                      is always returned to identify a SCIM resource.
+
+                  `never` - The attribute is never returned.  This may occur because
+                      the original attribute value (e.g., a hashed value) is not
+                      retained by the service provider.  A service provider MAY
+                      allow attributes to be used in a search filter.
+                    
+                  `default` - The attribute is returned by default in all SCIM
+                      operation responses where attribute values are returned.  If
+                      the GET request "attributes" parameter is specified,
+                      attribute values are only returned if the attribute is named
+                      in the "attributes" parameter.  DEFAULT.
+
+                  `request` - The attribute is returned in response to any PUT,
+                      POST, or PATCH operations if the attribute was specified by
+                      the client (for example, the attribute was modified).  The
+                      attribute is returned in a SCIM query operation only if
+                      specified in the "attributes" parameter.
+              uniqueness:
+                type: string
+                description: |-
+                  A single keyword value that specifies how the service
+                  provider enforces uniqueness of attribute values.  A server MAY
+                  reject an invalid value based on uniqueness by returning HTTP
+                  response code 400 (Bad Request).  A client MAY enforce
+                  uniqueness on the client side to a greater degree than the
+                  service provider enforces.  For example, a client could make a
+                  value unique while the server has uniqueness of "none".  Valid
+                  keywords are as follows:
+
+                  `none` ` The values are not intended to be unique in any way.
+                      DEFAULT.
+
+                  `server` - The value SHOULD be unique within the context of the
+                      current SCIM endpoint (or tenancy) and MAY be globally
+                      unique (e.g., a "username", email address, or other
+                      server-generated key or counter).  No two resources on the
+                      same server SHOULD possess the same value.
+
+                  `global` - The value SHOULD be globally unique (e.g., an email
+                      address, a GUID, or other value).  No two resources on any
+                      server SHOULD possess the same value.
+              referenceTypes:
+                type: array
+                items:
+                  type: string
+                description: |-
+                  A multi-valued array of JSON strings that indicate
+                  the SCIM resource types that may be referenced.  Valid values
+                  are as follows:
+                  - A SCIM resource type (e.g., "User" or "Group"),
+                  -  "external" - indicating that the resource is an external
+                      resource (e.g., a photo), or
+
+                  -  "uri" - indicating that the reference is to a service
+                      endpoint or an identifier (e.g., a schema URN).
+
+                  This attribute is only applicable for attributes that are of
+                  type "reference" (Section 2.3.7).
+      required:
+        - schemas
+        - id
   responses:
     error:
       description: 'https://www.rfc-editor.org/rfc/rfc7644#section-3.12 details the expected values along with some tables describing their usage.'
@@ -1037,58 +1892,7 @@ components:
       content:
         application/scim+json:
           schema:
-            type: object
-            properties:
-              schemas:
-                type: array
-                description: Documents that the error response contains the core error message attributes
-                items:
-                  type: string
-                  enum:
-                    - 'urn:ietf:params:scim:api:messages:2.0:Error'
-                  default: 'urn:ietf:params:scim:api:messages:2.0:Error'
-              status:
-                type: string
-                description: |-
-                  The HTTP status code that represents the error.
-
-                  | Status                      | Applicability                 | Suggested Explanation                                                                                                                                                                                                                                       |
-                  |-----------------------------|-------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-                  | 307 (Temporary Redirect)    | GET, POST, PUT, PATCH, DELETE | The client is directed to repeat the same HTTP request at the location identified.  The client SHOULD NOT use the location provided in the response as a permanent reference to the resource and SHOULD continue to use the original request URI [RFC7231]. |
-                  | 308 (Permanent Redirect)    | GET, POST, PUT, PATCH, DELETE | The client is directed to repeat the same HTTP request at the location identified.  The client SHOULD use the location provided in the response as the permanent reference to the resource [RFC7538].                                                       |
-                  | 400 (Bad Request)           | GET, POST, PUT, PATCH, DELETE | Request is unparsable, syntactically incorrect, or violates schema.                                                                                                                                                                                         |
-                  | 401 (Unauthorized)          | GET, POST, PUT, PATCH, DELETE | Authorization failure.  The authorization header is invalid or missing.                                                                                                                                                                                     |
-                  | 403 (Forbidden)             | GET, POST, PUT, PATCH, DELETE | Operation is not permitted based on the supplied authorization.                                                                                                                                                                                             |
-                  | 404 (Not Found)             | GET, POST, PUT, PATCH, DELETE | Specified resource (e.g., User) or endpoint does not exist.                                                                                                                                                                                                 |
-                  | 409 (Conflict)              | POST, PUT, PATCH, DELETE      | The specified version number does not match the resource's latest version number, or a service provider refused to create a new, duplicate resource.                                                                                                        |
-                  | 412 (Precondition Failed)   | PUT, PATCH, DELETE            | Failed to update.  Resource has changed on the server.                                                                                                                                                                                                      |
-                  | 413 (Payload Too Large)     | POST                          | {"maxOperations": 1000,"maxPayloadSize": 1048576}                                                                                                                                                                                                           |
-                  | 500 (Internal Server Error) | GET, POST, PUT, PATCH, DELETE | An internal error.  Implementers SHOULD provide descriptive debugging advice.                                                                                                                                                                               |
-                  | 501 (Not Implemented)       | GET, POST, PUT, PATCH, DELETE | Service provider does not support the request operation, e.g., PATCH.                                                                                                                                                                                       |
-                pattern: '^[2-5][0-9][0-9]$'
-              scimType:
-                type: string
-                description: |-
-                  The status field is used to documment a more specific error category than the HTTP status codes support. For status code 400 there is a list of predefined options. Implementations may add additional ones.
-
-                  | scimType             | Description                                                                                                                                                                                                                                             | Applicability                                                                                     |   |   |
-                  |----------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------|---|---|
-                  | invalidFilter        | The specified filter syntax was invalid (does not comply with Figure 1), or the specified attribute and filter comparison combination is not supported.                                                                                                 | GET (Section 3.4.2), POST (Search - Section 3.4.3), PATCH (Path Filter - Section 3.5.2)           |   |   |
-                  | tooMany              | The specified filter yields many more results than the server is willing to calculate or process.  For example a filter such as "(userName pr)" by itself would return all entries with a "userName" and MAY not be acceptable to the service provider. | GET (Section 3.4.2), POST (Search - Section 3.4.3)                                                |   |   |
-                  | uniqueness           | One or more of the attribute values are already in use or are reserved.                                                                                                                                                                                 | POST (Create - Section 3.3), PUT (Section 3.5.1), PATCH (Section 3.5.2)                           |   |   |
-                  | mutability           | The attempted modification is not compatible with the target attribute's mutability or current state (e.g. modification of an "immutable" attribute with an existing value).                                                                            | PUT (Section 3.5.1), PATCH (Section 3.5.2)                                                        |   |   |
-                  | invalidSyntax        | The request body message structure was invalid or did not conform to the request schema.                                                                                                                                                                | POST (Search - Section 3.4.3, Create - Section 3.3, Bulk - Section 3.7), PUT (Section 3.5.1)      |   |   |
-                  | invalidPath noTarget | The `path` attribute was invalid or malformed (see Figure 7).                                                                                                                                                                                           | PATCH (Section 3.5.2)                                                                             |   |   |
-                  | noTarget             | The specified "path" did not yield an attribute or attribute value that could be operated on.  This occurs when the specified "path" value contains a filter that yields no match.                                                                      | PATCH (Section 3.5.2)                                                                             |   |   |
-                  | invalidValue         | A required value was missing, or the value specified was not compatible with the operation or attribute type (see Section 2.2 of [RFC7643]), or resource schema (see Section 4 of [RFC7643]).                                                           | GET (Section 3.4.2), POST (Create - Section 3.3, PATCH (Section 3.5.2)                            |   |   |
-                  | invalidVers          | The specified SCIM protocol version is not supported (see Section 3.13).                                                                                                                                                                                | GET (Section 3.4.2), POST (ALL), PUT (Section 3.5.1), PATCH (Section 3.5.2), DELETE (Section 3.6) |   |   |
-                  | sensitive            | The specified request cannot be completed, due to the passing of sensitive (e.g., personal) information in a request URI.  For example, personal information SHALL NOT be transmitted over request URIs.  See Section 7.5.2.                            | GET (Section 3.4.2)                                                                               |   |   |
-              detail:
-                type: string
-                description: A detailed human-readable message.  OPTIONAL.
-            required:
-              - schemas
-              - status
+            $ref: '#/components/schemas/MessageError'
     error-uniqueness:
       description: Another resouce exists with the same key attributes
       headers:
@@ -1122,7 +1926,7 @@ components:
             required:
               - schemas
               - status
-    ResourceUsers:
+    ResourceUser:
       description: |-
         Creating, replacing and modifying a resoruce all return the same response.
 
@@ -1139,7 +1943,23 @@ components:
           $ref: '#/components/headers/ETag'
         Content-Type:
           $ref: '#/components/headers/Content-Type'
-  requestBodies: {}
+    ResourceGroup:
+      description: |-
+        Creating, replacing and modifying a resoruce all return the same response.
+
+        It will include any modifications to the data made by the service provider.
+      content:
+        application/scim+json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ResourceGroup'
+      headers:
+        Location:
+          $ref: '#/components/headers/Location'
+        ETag:
+          $ref: '#/components/headers/ETag'
+        Content-Type:
+          $ref: '#/components/headers/Content-Type'
 paths:
   /Users:
     get:
@@ -1167,7 +1987,7 @@ paths:
             application/scim+json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/SchemaListResponse'
+                  - $ref: '#/components/schemas/MessageListResponse'
                   - type: object
                     properties:
                       Resources:
@@ -1181,7 +2001,7 @@ paths:
       operationId: post-Users
       responses:
         '201':
-          $ref: '#/components/responses/ResourceUsers'
+          $ref: '#/components/responses/ResourceUser'
         '409':
           $ref: '#/components/responses/error-uniqueness'
         default:
@@ -1205,7 +2025,31 @@ paths:
           resource conflicts with existing resources (e.g., a "User" resource
           with a duplicate "userName"), the service provider MUST return HTTP
           status code 409 (Conflict) with a "scimType" error code of "uniqueness"
-      description: ''
+      description: |-
+        To create new resources, clients send HTTP POST requests to the
+        resource endpoint, such as "/Users" or "/Groups", as defined by the
+        associated resource type endpoint discovery (see Section 4).
+
+        The server SHALL process attributes according to the following
+        mutability rules:
+
+        -  In the request body, attributes whose mutability is "readOnly"
+            (see Sections 2.2 and 7 of [RFC7643]) SHALL be ignored.
+
+        -  Attributes whose mutability is "readWrite" (see Section 2.2 of
+            [RFC7643]) and that are omitted from the request body MAY be
+            assumed to be not asserted by the client.  The service provider
+            MAY assign a default value to non-asserted attributes in the final
+            resource representation.
+
+        -  Service providers MAY take into account whether or not a client
+            has access to all of the resource's attributes when deciding
+            whether or not non-asserted attributes should be defaulted.
+
+        -  Clients that intend to override existing or server-defaulted
+            values for attributes MAY specify "null" for a single-valued
+            attribute or an empty array "[]" for a multi-valued attribute to
+            clear all values.
   '/Users/{id}':
     parameters:
       - schema:
@@ -1219,7 +2063,7 @@ paths:
         - Core Resources
       responses:
         '200':
-          $ref: '#/components/responses/ResourceUsers'
+          $ref: '#/components/responses/ResourceUser'
         '404':
           description: Not Found
         default:
@@ -1242,7 +2086,7 @@ paths:
       operationId: put-Users-id
       responses:
         '200':
-          $ref: '#/components/responses/ResourceUsers'
+          $ref: '#/components/responses/ResourceUser'
         default:
           $ref: '#/components/responses/error'
       tags:
@@ -1251,17 +2095,71 @@ paths:
         content:
           application/scim+json:
             schema:
-              type: object
-              properties: {}
+              $ref: '#/components/schemas/ResourceUser'
       parameters:
         - $ref: '#/components/parameters/Content-Type'
         - $ref: '#/components/parameters/Accept'
+        - $ref: '#/components/parameters/If-Match'
+      description: |-
+        Implementers MUST support full replace via HTTP PUT as specified in Section 4.3 of [RFC7231]. Partial updates via HTTP PATCH is strongly recommended. 
+
+
+        HTTP PUT is used to replace a resource's attributes.  For example,
+        clients that have previously retrieved the entire resource in advance
+        and revised it MAY replace the resource using an HTTP PUT.  Because
+        SCIM resource identifiers are assigned by the service provider, HTTP
+        PUT MUST NOT be used to create new resources.
+
+        As the operation's intent is to replace all attributes, SCIM clients
+        MAY send all attributes, regardless of each attribute's mutability.
+        The server will apply attribute-by-attribute replacements according
+        to the following attribute mutability rules:
+
+        ## readWrite, writeOnly
+        Any values provided SHALL replace the existing
+        attribute values.
+
+        Attributes whose mutability is "readWrite" that are omitted from
+        the request body MAY be assumed to be not asserted by the client.
+        The service provider MAY assume that any existing values are to be
+        cleared, or the service provider MAY assign a default value to the
+        final resource representation.  Service providers MAY take into
+        account whether or not a client has access to, or understands, all
+        of the resource's attributes when deciding whether non-asserted
+        attributes SHALL be removed or defaulted.  Clients that want to
+        override a server's defaults MAY specify "null" for a
+        single-valued attribute, or an empty array "[]" for a multi-valued
+        attribute, to clear all values.
+
+        ## immutable
+        If one or more values are already set for the attribute,
+        the input value(s) MUST match, or HTTP status code 400 SHOULD be
+        returned with a "scimType" error code of "mutability".  If the
+        service provider has no existing values, the new value(s) SHALL be
+        applied.
+
+        ## readOnly
+        Any values provided SHALL be ignored.
+
+        ## required
+        If an attribute is "required", clients MUST specify the attribute in
+        the PUT request.
+
+        ## Response
+        The service responds with the entire updated User and a HTTP 200 status unless otherwise specified
     patch:
       summary: Modify User
       operationId: patch-Users-id
       responses:
         '200':
-          $ref: '#/components/responses/ResourceUsers'
+          $ref: '#/components/responses/ResourceUser'
+        '204':
+          description: No Content map be returned if the `attributes` and `excludeAttributes` query parametes were not specified.
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+            ETag:
+              $ref: '#/components/headers/ETag'
         default:
           $ref: '#/components/responses/error'
       tags:
@@ -1270,30 +2168,157 @@ paths:
         content:
           application/scim+json:
             schema:
-              type: object
-              properties: {}
+              $ref: '#/components/schemas/MessagePatchOp'
       parameters:
         - $ref: '#/components/parameters/Content-Type'
         - $ref: '#/components/parameters/Accept'
         - $ref: '#/components/parameters/attributes'
         - $ref: '#/components/parameters/excludedAttributes'
+        - $ref: '#/components/parameters/If-Match'
+      description: |-
+        See [rfc7644#section-3.5.2](https://www.rfc-editor.org/rfc/rfc7644#section-3.5.2) for full details on the PATCH operation
+
+         HTTP PATCH is an OPTIONAL server function that enables clients to
+         update one or more attributes of a SCIM resource using a sequence of
+         operations to "add", "remove", or "replace" values.  Clients may
+         discover service provider support for PATCH by querying the service
+         provider configuration
+         
+         The general form of the SCIM PATCH request is based on JSON Patch
+         [RFC6902].  One difference between SCIM PATCH and JSON Patch is that
+         SCIM servers do not support array indexing and do not support
+         [RFC6902] operation types relating to array element manipulation,
+         such as "move".
+         
+         a client MUST NOT modify an attribute
+         that has mutability "readOnly" or "immutable".  However, a client MAY
+         "add" a value to an "immutable" attribute if the attribute had no
+         previous value.  An operation that is not compatible with an
+         attribute's mutability or schema SHALL return the appropriate HTTP
+         response status code and a JSON detail error response as defined in
+         Section 3.12.
+         
+         It may be possible to modify the schemas of a resource. Subsequent operations
+         SHALL assume the modified state of the "schemas" attribute.  Clients
+         MAY implicitly modify the "schemas" attribute by adding (or replacing) an attribute with its fully qualified name, including
+         schema URN.  For example, adding the attribute "urn:ietf:params:scim:
+         schemas:extension:enterprise:2.0:User:employeeNumber" automatically
+         adds the value
+         "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User" to the
+         resource's "schemas" attribute.
+         
+        Each PATCH operation represents a single action to be applied to the
+         same SCIM resource specified by the request URI.  Operations are
+         applied sequentially in the order they appear in the array.  Each
+         operation in the sequence is applied to the target resource; the
+         resulting resource becomes the target of the next operation.
+         Evaluation continues until all operations are successfully applied or
+         until an error condition is encountered.
+
+         For multi-valued attributes, a PATCH operation that sets a value's
+         "primary" sub-attribute to "true" SHALL cause the server to
+         automatically set "primary" to "false" for any other values in the
+         array.
+         
+         A PATCH request, regardless of the number of operations, SHALL be
+           treated as atomic.  If a single operation encounters an error
+           condition, the original SCIM resource MUST be restored, and a failure
+           status SHALL be returned.
+
+           If a request fails, the server SHALL return an HTTP response status
+           code and a JSON detail error response as defined in Section 3.12.
+
+           On successful completion, the server either MUST return a 200 OK
+           response code and the entire resource within the response body,
+           subject to the "attributes" query parameter (see Section 3.9), or MAY
+           return HTTP status code 204 (No Content) and the appropriate response
+           headers for a successful PATCH request.  The server MUST return a 200
+           OK if the "attributes" parameter is specified in the request.
     delete:
       summary: Delete User
       operationId: delete-Users-id
       responses:
-        '200':
-          description: OK
+        '204':
+          description: No Content - Successfully deleted
         default:
           $ref: '#/components/responses/error'
       tags:
         - Core Resources
+      parameters:
+        - $ref: '#/components/parameters/If-Match'
+      description: |-
+        Clients request resource removal via DELETE.  Service providers MAY
+        choose not to permanently delete the resource but MUST return a 404
+        (Not Found) error code for all operations associated with the
+        previously deleted resource.  Service providers MUST omit the
+        resource from future query results.  In addition, the service
+        provider SHOULD NOT consider the deleted resource in conflict
+        calculation.  For example, if a User resource is deleted, a CREATE
+        request for a User resource with the same userName as the previously
+        deleted resource SHOULD NOT fail with a 409 error due to userName
+        conflict.
   /Groups:
     get:
-      summary: Your GET endpoint
+      summary: Query Groups
       tags:
         - Core Resources
-      responses: {}
       operationId: get-Groups
+      parameters:
+        - $ref: '#/components/parameters/attributes'
+        - $ref: '#/components/parameters/filter'
+        - $ref: '#/components/parameters/sortBy'
+        - $ref: '#/components/parameters/sortOrder'
+        - $ref: '#/components/parameters/startIndex'
+        - $ref: '#/components/parameters/count'
+        - $ref: '#/components/parameters/excludedAttributes'
+        - $ref: '#/components/parameters/Accept'
+      description: See docs in the users resource
+      responses:
+        '200':
+          description: OK
+          content:
+            application/scim+json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/MessageListResponse'
+                  - type: object
+                    properties:
+                      Resources:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ResourceGroup'
+        default:
+          $ref: '#/components/responses/error'
+    post:
+      summary: Create Group
+      operationId: post-Groups
+      responses:
+        '201':
+          $ref: '#/components/responses/ResourceGroup'
+        '409':
+          $ref: '#/components/responses/error-uniqueness'
+        default:
+          $ref: '#/components/responses/error'
+      tags:
+        - Core Resources
+      parameters:
+        - $ref: '#/components/parameters/Content-Type'
+        - $ref: '#/components/parameters/attributes'
+        - $ref: '#/components/parameters/excludedAttributes'
+        - $ref: '#/components/parameters/Accept'
+      requestBody:
+        content:
+          application/scim+json:
+            schema:
+              $ref: '#/components/schemas/ResourceGroup'
+        description: |-
+          Successfully creating a group will respond with status code 201.
+
+          If the service provider determines that the creation of the requested
+          resource conflicts with existing resources (e.g., a "User" resource
+          with a duplicate "userName"), the service provider MUST return HTTP
+          status code 409 (Conflict) with a "scimType" error code of "uniqueness"
+      description: See docs in the users resource
   '/Groups/{id}':
     parameters:
       - schema:
@@ -1302,59 +2327,187 @@ paths:
         in: path
         required: true
     get:
-      summary: Your GET endpoint
+      summary: Retrieve Group
       tags:
         - Core Resources
-      responses: {}
+      responses:
+        '200':
+          $ref: '#/components/responses/ResourceGroup'
+        '404':
+          description: Not Found
+        default:
+          $ref: '#/components/responses/error'
       operationId: get-Groups-id
+      description: See docs in the users resource
+      parameters:
+        - $ref: '#/components/parameters/Accept'
+        - $ref: '#/components/parameters/attributes'
+        - $ref: '#/components/parameters/excludedAttributes'
+    put:
+      summary: Replace Group
+      operationId: put-Groups-id
+      responses:
+        '200':
+          $ref: '#/components/responses/ResourceGroup'
+        default:
+          $ref: '#/components/responses/error'
+      tags:
+        - Core Resources
+      requestBody:
+        content:
+          application/scim+json:
+            schema:
+              $ref: '#/components/schemas/ResourceGroup'
+      parameters:
+        - $ref: '#/components/parameters/Content-Type'
+        - $ref: '#/components/parameters/Accept'
+        - $ref: '#/components/parameters/If-Match'
+      description: See docs in the users resource
+    patch:
+      summary: Modify Group
+      operationId: patch-Groups-id
+      responses:
+        '200':
+          $ref: '#/components/responses/ResourceGroup'
+        '204':
+          description: No Content map be returned if the `attributes` and `excludeAttributes` query parametes were not specified.
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+            ETag:
+              $ref: '#/components/headers/ETag'
+        default:
+          $ref: '#/components/responses/error'
+      tags:
+        - Core Resources
+      requestBody:
+        content:
+          application/scim+json:
+            schema:
+              $ref: '#/components/schemas/MessagePatchOp'
+      parameters:
+        - $ref: '#/components/parameters/Content-Type'
+        - $ref: '#/components/parameters/Accept'
+        - $ref: '#/components/parameters/attributes'
+        - $ref: '#/components/parameters/excludedAttributes'
+        - $ref: '#/components/parameters/If-Match'
+      description: See docs in the users resource
+    delete:
+      summary: Delete Group
+      operationId: delete-Groups-id
+      responses:
+        '204':
+          description: No Content - Successfully deleted
+        default:
+          $ref: '#/components/responses/error'
+      tags:
+        - Core Resources
+      parameters:
+        - $ref: '#/components/parameters/If-Match'
+      description: See docs in the users resource
   /Me:
     get:
-      summary: Your GET endpoint
-      tags:
-        - Core Resources
+      summary: '"/Me" Authenticated Subject Alias'
       responses: {}
       operationId: get-Me
-    put:
-      summary: ''
-      operationId: put-Me
-      responses:
-        '200':
-          description: OK
-    patch:
-      summary: ''
-      operationId: patch-Me
-      responses:
-        '200':
-          description: OK
-    delete:
-      summary: ''
-      operationId: delete-Me
-      responses:
-        '200':
-          description: OK
+      description: |-
+        A client MAY use a URL of the form "<base-URI>/Me" as a URI alias for
+        the User or other resource associated with the currently
+        authenticated subject for any SCIM operation.  A service provider MAY
+        respond in one of three ways:
+        - A service provider that does NOT support this feature SHOULD
+          respond with HTTP status code 501 (Not Implemented).
+        - A service provider MAY choose to redirect the client using HTTP
+          status code 308 (Permanent Redirect) to the resource associated
+          with the authenticated subject.  The client MAY then repeat the
+          request at the indicated location.
+        - A service provider MAY process the SCIM request directly.  In any
+          response, the HTTP "Location" header MUST be the permanent
+          location of the aliased resource associated with the authenticated
+          subject.
+          
+      tags:
+        - Special Operations
   /ServiceProviderConfig:
     get:
       summary: Retrieve Service Provider Configuration
       tags:
-        - Core Service Data
-      responses: {}
+        - Core Service Provider Configuration
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchemaServiceProviderConfig'
       operationId: get-ServiceProviderConfig
       description: Retrieve service provider's configuration
+      parameters:
+        - $ref: '#/components/parameters/Accept'
+        - $ref: '#/components/parameters/attributes'
+        - $ref: '#/components/parameters/excludedAttributes'
   /ResourceTypes:
     get:
       summary: Query Resource Types
       tags:
-        - Core Service Data
-      responses: {}
+        - Core Service Provider Configuration
+      responses:
+        '200':
+          description: Ok
+          content:
+            application/scim+json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/MessageListResponse'
+                  - type: object
+                    properties:
+                      Resources:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ResourceResourceType'
+        default:
+          $ref: '#/components/responses/error'
+      parameters:
+        - $ref: '#/components/parameters/Accept'
+        - $ref: '#/components/parameters/attributes'
+        - $ref: '#/components/parameters/excludedAttributes'
       operationId: get-ResourceTypes
-      description: Retrieve supported resource types
+      description: |-
+        An HTTP GET to this endpoint is used to discover the types of
+        resources available on a SCIM service provider (e.g., Users and
+        Groups).  Each resource type defines the endpoints, the core
+        schema URI that defines the resource, and any supported schema
+        extensions.  The attributes defining a resource type can be found
+        in Section 6 of [RFC7643], and an example representation can be
+        found in Section 8.6 of [RFC7643].
+
+        Query parameters described in Section 3.4.2, such as
+         filtering, sorting, and pagination, SHALL be ignored.  If a "filter"
+         is provided, the service provider SHOULD respond with HTTP status
+         code 403 (Forbidden) to ensure that clients cannot incorrectly assume
+         that any matching conditions specified in a filter are true.
   '/ResourceTypes/{id}':
     get:
       summary: Retrieve Resource Type
       tags:
-        - Core Service Data
-      responses: {}
+        - Core Service Provider Configuration
+      responses:
+        '200':
+          description: OK
+          content:
+            application/scim+json:
+              schema:
+                $ref: '#/components/schemas/ResourceResourceType'
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+            Content-Type:
+              $ref: '#/components/headers/Content-Type'
+        default:
+          $ref: '#/components/responses/error'
       operationId: get-ResourceTypes-id
+      parameters:
+        - $ref: '#/components/parameters/Accept'
     parameters:
       - schema:
           type: string
@@ -1365,14 +2518,39 @@ paths:
     get:
       summary: Query schemas
       tags:
-        - Core Service Data
-      responses: {}
+        - Core Service Provider Configuration
+      responses:
+        '200':
+          description: Ok
+          content:
+            application/scim+json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/MessageListResponse'
+                  - type: object
+                    properties:
+                      Resources:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ResourceSchema'
+        default:
+          $ref: '#/components/responses/error'
+      parameters:
+        - $ref: '#/components/parameters/Accept'
+        - $ref: '#/components/parameters/attributes'
+        - $ref: '#/components/parameters/excludedAttributes'
       operationId: get-Schemas
       description: |-
-        Retrieve supported schemas
+        used to retrieve information about resource schemas supported by a SCIM service provider.
 
         SCIM message schemas using the `urn:ietf:params:scim:api:` prefix URN SHALL NOT
-           be discoverable using the `/Schemas` endpoint. (Section 3.1)
+         be discoverable using the `/Schemas` endpoint. (Section 3.1)
+         
+         Query parameters described in Section 3.4.2, such as
+         filtering, sorting, and pagination, SHALL be ignored.  If a "filter"
+         is provided, the service provider SHOULD respond with HTTP status
+         code 403 (Forbidden) to ensure that clients cannot incorrectly assume
+         that any matching conditions specified in a filter are true.
   '/Schemas/{id}':
     parameters:
       - schema:
@@ -1383,8 +2561,21 @@ paths:
     get:
       summary: Retrieve schemas
       tags:
-        - Core Service Data
-      responses: {}
+        - Core Service Provider Configuration
+      responses: 
+        '200':
+          description: OK
+          content:
+            application/scim+json:
+              schema:
+                $ref: '#/components/schemas/ResourceSchema'
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+            Content-Type:
+              $ref: '#/components/headers/Content-Type'
+        default:
+          $ref: '#/components/responses/error'
       operationId: get-Schemas-id
   /Bulk:
     post:
@@ -1393,6 +2584,69 @@ paths:
       responses:
         '200':
           description: OK
+          content:
+            application/scim+json:
+              schema:
+                $ref: '#/components/schemas/MessageBulkResponse'
+          headers:
+            Content-Type:
+              $ref: '#/components/headers/Content-Type'
+        '413':
+          description: |-
+            `Request Entity Too Large` will be returned if the maximum number of operations or
+               maximum payload size a client may send in a single request as documented in the service config is exceded
+          headers:
+            Content-Type:
+              $ref: '#/components/headers/Content-Type'
+          content:
+            application/scim+json:
+              schema:
+                type: object
+                properties:
+                  schemas:
+                    type: array
+                    description: Documents that the error response contains the core error message attributes
+                    items:
+                      type: string
+                      enum:
+                        - 'urn:ietf:params:scim:api:messages:2.0:Error'
+                      default: 'urn:ietf:params:scim:api:messages:2.0:Error'
+                  status:
+                    type: string
+                    description: The HTTP status code that represents the error. This will always be 413
+                    default: '413'
+                  scimType:
+                    type: string
+                    description: No value defined by spec
+                  detail:
+                    type: string
+                    description: A detailed human-readable message.  OPTIONAL.
+                    example: The userName of "myCoolUser" is already in use or are reserved.
+                required:
+                  - schemas
+                  - status
+      requestBody:
+        content:
+          application/scim+json:
+            schema:
+              $ref: '#/components/schemas/MessageBulkRequest'
+      description: |-
+        The SCIM bulk operation is an optional server feature that enables
+           clients to send a potentially large collection of resource operations
+           in a single request.  Support for bulk requests can be discovered by
+           querying the service provider configuration (see Section 4).  The
+           body of a bulk operation contains a set of HTTP resource operations
+           using one of the HTTP methods supported by the API, i.e., POST, PUT,
+           PATCH, or DELETE.
+           
+           Each operation may be processed in a seperate transaction.
+           
+           See https://www.rfc-editor.org/rfc/rfc7644#section-3.7
+      parameters:
+        - $ref: '#/components/parameters/Content-Type'
+        - $ref: '#/components/parameters/Accept'
+      tags:
+        - Special Operations
   /.search:
     post:
       summary: Search
@@ -1400,6 +2654,12 @@ paths:
       responses:
         '200':
           description: OK
+          content:
+            application/scim+json:
+              schema:
+                $ref: '#/components/schemas/MessageListResponse'
+        default:
+          $ref: '#/components/responses/error'
       description: |-
         You may also add `/.search` to the end of any other path to enable doing the search action against that resource using POST instead of the standard GET.
 
@@ -1423,6 +2683,17 @@ paths:
          type, the service provider SHALL treat the attribute as if there is
          no attribute value.  For example, a presence or equality filter for
          an undefined attribute evaluates to false.
+      tags:
+        - Special Operations
+      requestBody:
+        content:
+          application/scim+json:
+            schema:
+              $ref: '#/components/schemas/MessageSearchRequest'
+      parameters:
+        - $ref: '#/components/parameters/Content-Type'
+        - $ref: '#/components/parameters/Accept'
 tags:
   - name: Core Resources
-  - name: Core Service Data
+  - name: Core Service Provider Configuration
+  - name: Special Operations
