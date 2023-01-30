@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>OpenAPI Definition of SCIM: System for Cross-domain Identity Management</title>
+
+    <script src="https://unpkg.com/@stoplight/elements/web-components.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/@stoplight/elements/styles.min.css">
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        .api-container {
+            flex: 1 0 0;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body>
+<header><a href="index.html">Home</a> </header>
+<div class="api-container">
+    <elements-api
+            apiDescriptionUrl="openapi/scim.yaml"
+            router="hash"
+            logo="img/logo/SCIM_B-and-W_72x24.png"
+    />
+
+</div>
+<!--footer>Some footer</footer-->
+</body>
+</html>

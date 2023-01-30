@@ -1,0 +1,1428 @@
+openapi: 3.1.0
+x-stoplight:
+  id: fjw9hk3jj3j9b
+info:
+  title: 'SCIM: System for Cross-domain Identity Management'
+  version: v2
+  description: |-
+    These Open API specifications are a non-normitive example implementation of both the adopted and draft SCIM related RFCs. Service providers are encoraged to copy them as a starting point for defining their own service.
+
+    For full details view the RFCs of the [IETF SCIM working group](https://datatracker.ietf.org/wg/scim/documents/)
+
+
+
+    ## Base URI
+    Implementers are free to choose any base URI that they desire. The ones provided here are samples based on the examples in the RFCs. 
+
+    The spec suggests using the base URI or a header to identify tenents in a multi tenant service.
+
+    Per [rfc7644#section-3.13](https://www.rfc-editor.org/rfc/rfc7644#section-3.13) a version indicator may optionally be added to the **end** of the base URI. Requests to a base URI without a version indicator should be treated the same as requests to the most recent version.
+
+    ## Security
+    Implementers are free to choose any security scheme they want. OAuth2 access tokens in the Authorization header are the most common. There are some other suggested ones in [rfc7644#section-2](https://www.rfc-editor.org/rfc/rfc7644#section-2)
+
+    In some SCIM deployments, it MAY be acceptable to permit
+    unauthenticated (anonymous) requests -- for example, a user
+    self-registration request.
+
+    ## Message Bodies
+    All request and response bodies should be JSON with a `schema` attribute at the root
+
+    # Key Terms
+
+    Service Provider - The application that implements some or all of these API endpoints
+
+    Client - The application that calls these API endpoints
+
+    Message - The body of a request or response
+
+    Resource - A singular record of data made up of the common attributes, its base schema and any extension schemas. Service providers may define their own additional resource types.
+
+    Schema - A set of attributes (fields) that a resource or message can contain.
+
+    # Processing Rules
+
+    See [rfc7644#section-3.3 to 3.7](https://www.rfc-editor.org/rfc/rfc7644#section-3.3) for full details.
+
+    It is expected that service providers will not support all of the attributes defined by the specifications. As such both service provider and clients should ignore any unknown attributes.
+
+    Service providers shall ignore any attributes marked as read-only when sent in a request.
+
+    Service providers may apply transformations to the data they recieve in requests. They should respond with the transformed version of the resource.
+
+    Attributes whose mutability is "readWrite" (see Section 2.2 of
+    [RFC7643]) and that are omitted from the request body MAY be
+    assumed to be not asserted by the client.  The service provider
+    MAY assign a default value to non-asserted attributes in the final
+    resource representation.
+
+    Service providers MAY take into account whether or not a client
+    has access to all of the resource's attributes when deciding
+    whether or not non-asserted attributes should be defaulted.
+
+    Clients that intend to override existing or server-defaulted
+    values for attributes MAY specify `null` for a single-valued
+    attribute or an empty array `[]` for a multi-valued attribute to
+    clear all values.
+
+    If the service provider determines that the creation of the requested resource conflicts with existing resources (e.g., a "User" resource with a duplicate "userName"), the service provider MUST return HTTP status code 409 (Conflict) with a "scimType" error code of "uniqueness", as per Section 3.12.
+
+    Before comparing or evaluating the uniqueness of a
+     "userName" or "password" attribute, service providers MUST use the
+     preparation, enforcement, and comparison of internationalized strings
+     (PRECIS) preparation and comparison rules described in Sections 3 and
+     4, respectively, of [RFC7613], which is based on the PRECIS framework
+     specification [RFC7564].
+servers:
+  - url: 'https://example.com/scim/v2'
+  - url: 'https://example.com/scim'
+  - url: 'https://www.example.com/scim/{tenant_id}/v2'
+  - url: 'https://www.example.com/Tenants/{tenant_id}/v2'
+  - url: 'https://tenant_id.example.com/scim/v2'
+  - url: 'https://tenant_id.example.com/v2'
+components:
+  parameters:
+    Content-Type:
+      name: Content-Type
+      in: header
+      required: true
+      schema:
+        type: string
+        default: application/scim+json
+        enum:
+          - application/scim+json; charset=utf-8
+          - application/scim+json
+          - application/json
+        example: application/scim+json
+      description: Indicates that the request body contains content formated according to SCIM rules
+    Accept:
+      name: Accept
+      in: header
+      schema:
+        type: string
+        default: application/scim+json
+        enum:
+          - application/scim+json
+          - application/json
+        example: application/scim+json
+      description: Indicates that the response body contains content formated according to SCIM rules
+    Accept-Charset:
+      name: Accept-Charset
+      in: header
+      schema:
+        type: string
+        default: UTF-8
+        enum:
+          - UTF-8
+        example: UTF-8
+      description: Indicates that the response body contains content in UTF-8
+    attributes:
+      name: attributes
+      in: query
+      required: false
+      schema:
+        type: array
+        items:
+          type: string
+      description: |-
+        SCIM service providers MUST support both `attributes` and `excludedAttributes` query parameters. 
+        Clients may optionally send either of them to control which attributes are returned in responses.
+
+        When `attributes` is provided it overrides the default set.
+
+        When `excludedAttributes` is provided the listed attributes shall be removed from the default set. 
+        This parameter SHALL have no effect on attributes whose schema "returned" setting is "always".
+
+        Attribute names MUST be in standard attribute notation (Section 3.10) form.  See
+        rfc7644 Section 3.9 for additional retrieval query parameters.
+    excludedAttributes:
+      name: excludedAttributes
+      in: query
+      required: false
+      schema:
+        type: array
+        items:
+          type: string
+      description: |-
+        SCIM service providers MUST support both `attributes` and `excludedAttributes` query parameters. 
+        Clients may optionally send either of them to control which attributes are returned in responses.
+
+        When `attributes` is provided it overrides the default set.
+
+        When `excludedAttributes` is provided the listed attributes shall be removed from the default set. 
+        This parameter SHALL have no effect on attributes whose schema "returned" setting is "always".
+
+        Attribute names MUST be in standard attribute notation (Section 3.10) form.  See
+        rfc7644 Section 3.9 for additional retrieval query parameters.
+    filter:
+      name: filter
+      in: query
+      required: false
+      schema:
+        type: string
+        examples:
+          - filter=userName eq "bjensen"
+          - filter=name.familyName co "O'Malley"
+          - filter=userName sw "J"
+          - 'filter=urn:ietf:params:scim:schemas:core:2.0:User:userName sw "J"'
+          - filter=title pr
+          - 'filter=meta.lastModified gt "2011-05-13T04:42:34Z"'
+          - 'filter=meta.lastModified ge "2011-05-13T04:42:34Z"'
+          - 'filter=meta.lastModified lt "2011-05-13T04:42:34Z"'
+          - 'filter=meta.lastModified le "2011-05-13T04:42:34Z"'
+          - filter=title pr and userType eq "Employee"
+          - filter=title pr or userType eq "Intern"
+          - 'filter=schemas eq "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User"'
+          - filter=userType eq "Employee" and (emails co "example.com" or emails.value co "example.org")
+          - filter=userType ne "Employee" and not (emails co "example.com" or emails.value co "example.org")
+          - filter=userType eq "Employee" and (emails.type eq "work")
+          - 'filter=userType eq "Employee" and emails[type eq "work" and value co "@example.com"]'
+          - 'filter=emails[type eq "work" and value co "@example.com"] or ims[type eq "xmpp" and value co "@foo.com"]'
+      description: 'Filtering is an OPTIONAL parameter for SCIM service providers.    Clients MAY discover service provider filter capabilities by looking    at the "filter" attribute of the "ServiceProviderConfig" endpoint    (see Section 4).  Clients MAY request a subset of resources by    specifying the "filter" query parameter containing a filter    expression.  When specified, only those resources matching the filter    expression SHALL be returned.  The expression language that is used    with the filter parameter supports references to attributes and    literals.     Attribute names and attribute operators used in filters are case    insensitive.  For example, the following two expressions will    evaluate to the same logical value:     filter=userName Eq "john"     filter=Username eq "john"     The filter parameter MUST contain at least one valid expression (see    Table 3).  Each expression MUST contain an attribute name followed by    an attribute operator and optional value.  Multiple expressions MAY    be combined using logical operators (see Table 4).  Expressions MAY    be grouped together using round brackets "(" and ")" (see Table 5).'
+    sortBy:
+      name: sortBy
+      in: query
+      required: false
+      schema:
+        type: string
+      description: 'The "sortBy" parameter specifies the attribute whose value       SHALL be used to order the returned responses.  If the "sortBy"       attribute corresponds to a singular attribute, resources are       sorted according to that attribute''s value; if it''s a multi-valued       attribute, resources are sorted by the value of the primary       attribute (see Section 2.4 of [RFC7643]), if any, or else the       first value in the list, if any.  If the attribute is complex, the       attribute name must be a path to a sub-attribute in standard       attribute notation (Section 3.10), e.g., "sortBy=name.givenName".       For all attribute types, if there is no data for the specified       "sortBy" value, they are sorted via the "sortOrder" parameter,       i.e., they are ordered last if ascending and first if descending.'
+    sortOrder:
+      name: sortOrder
+      in: query
+      required: false
+      schema:
+        type: string
+      description: 'The order in which the "sortBy" parameter is applied.       Allowed values are "ascending" and "descending".  If a value for       "sortBy" is provided and no "sortOrder" is specified, "sortOrder"       SHALL default to ascending.  String type attributes are case       insensitive by default, unless the attribute type is defined as a       case-exact string.  "sortOrder" MUST sort according to the       attribute type; i.e., for case-insensitive attributes, sort the       result using case-insensitive Unicode alphabetic sort order with       no specific locale implied, and for case-exact attribute types,       sort the result using case-sensitive Unicode alphabetic sort       order.'
+    startIndex:
+      name: startIndex
+      in: query
+      required: false
+      schema:
+        type: integer
+        default: 1
+      description: The 1-based index of the first query result.  A value less than 1 SHALL be interpreted as 1.
+    count:
+      name: count
+      in: query
+      required: false
+      schema:
+        type: string
+      description: |-
+        Non-negative integer.      
+        Specifies the desired      
+        maximum number of query    
+        results per page, e.g.,
+        10.  A negative value
+        SHALL be interpreted as    
+        "0".  A value of "0"
+        indicates that no resource 
+        results are to be returned 
+        except for "totalResults". 
+
+        There is no default value.  
+        When specified
+        the service provider    
+        MUST NOT return more    
+        results than specified
+        although it MAY return  
+        fewer results.  If      
+        unspecified, the
+        maximum number of       
+        results is set by the   
+        service provider.   
+  headers:
+    ETag:
+      required: false
+      schema:
+        type: string
+        example: W/"lha5bbazU3fNvfe5"
+      description: |-
+        The SCIM protocol supports resource versioning via standard HTTP
+        ETags (Section 2.3 of [RFC7232]).  Service providers MAY support weak
+        ETags as the preferred mechanism for performing conditional
+        retrievals and ensuring that clients do not inadvertently overwrite
+        each other's changes, respectively.  When supported, SCIM ETags MUST
+        be specified as an HTTP header and SHOULD be specified within the
+        'version' attribute contained in the resource's 'meta' attribute.
+        The value in the ETag header should exactly match the value in `meta.version`
+    Location:
+      required: true
+      schema:
+        type: string
+        format: uri
+        example: 'https://example.com/v2/Users/2819c223-7f76-453a-919d-413861904646'
+      description: |-
+        The value in the Location header must exactly match the value in `meta.location`
+        It should identify the URI at which this resource may be retrieved from. In the case of the special "/Me" alais, it should return the actual User ID.
+    Content-Type:
+      required: true
+      schema:
+        type: string
+        default: application/scim+json
+        enum:
+          - application/scim+json; charset=utf-8
+          - application/scim+json
+          - application/json
+        example: application/scim+json
+      description: Indicates that the response body contains content formated according to SCIM rules
+  examples: {}
+  schemas:
+    SchemaSearchRequest:
+      type: object
+      x-examples:
+        Example 1:
+          schemas:
+            - 'urn:ietf:params:scim:api:messages:2.0:SearchRequest'
+          attributes:
+            - displayName
+            - userName
+          filter: displayName sw "smith"
+          startIndex: 1
+          count: 10
+      description: ''
+      properties:
+        schemas:
+          type: array
+          description: 'Will always be just "urn:ietf:params:scim:api:messages:2.0:SearchRequest"'
+          items:
+            type: string
+            enum:
+              - 'urn:ietf:params:scim:api:messages:2.0:SearchRequest'
+            default: 'urn:ietf:params:scim:api:messages:2.0:SearchRequest'
+        attributes:
+          type: array
+          description: |-
+            A multi-valued list of strings indicating the names of
+                  resource attributes to return in the response, overriding the set
+                  of attributes that would be returned by default.  Attribute names
+                  MUST be in standard attribute notation (Section 3.10) form.  See
+                  Section 3.9 for additional retrieval query parameters.  OPTIONAL.
+          items:
+            type: string
+        excludedAttributes:
+          type: string
+          description: |-
+            A multi-valued list of strings indicating the
+                  names of resource attributes to be removed from the default set of
+                  attributes to return.  This parameter SHALL have no effect on
+                  attributes whose schema "returned" setting is "always" (see
+                  Sections 2.2 and 7 of [RFC7643]).  Attribute names MUST be in
+                  standard attribute notation (Section 3.10) form.  See Section 3.9
+                  for additional retrieval query parameters.  OPTIONAL.
+        filter:
+          type: string
+          description: |-
+            The filter string used to request a subset of resources.  The
+                  filter string MUST be a valid filter (Section 3.4.2.2) expression.
+                  OPTIONAL.
+        sortBy:
+          type: string
+          description: |-
+            A string indicating the attribute whose value SHALL be used
+                  to order the returned responses.  The "sortBy" attribute MUST be
+                  in standard attribute notation (Section 3.10) form.  See
+                  Section 3.4.2.3.  OPTIONAL.
+        sortOrder:
+          type: string
+          description: |-
+            A string indicating the order in which the "sortBy"
+                  parameter is applied.  Allowed values are "ascending" and
+                  "descending".  See Section 3.4.2.3.  OPTIONAL.
+        startIndex:
+          type: integer
+          description: |-
+            An integer indicating the 1-based index of the first
+                  query result.  See Section 3.4.2.4.  OPTIONAL.
+        count:
+          type: integer
+          description: |-
+            An integer indicating the desired maximum number of query
+                  results per page.  See Section 3.4.2.4.  OPTIONAL.
+      x-stoplight:
+        id: 66dd9b8c8b229
+      title: Schema - Search Request
+    SchemaListResponse:
+      type: object
+      x-examples:
+        Example 1:
+          schemas:
+            - 'urn:ietf:params:scim:api:messages:2.0:SchemaSchemaListResponse'
+          totalResults: 2
+          Resources:
+            - id: 2819c223-7f76-453a-919d-413861904646
+              userName: bjensen
+            - id: c75ad752-64ae-4823-840d-ffa80929976c
+              userName: jsmith
+      description: |-
+        All seach requests should return a response with this format.
+
+        When not all resources matching the filter criteria can be returned due to paging
+        the next page can be obtained by adding the `startIndex` to the `itemsPerPage` to get the value to use as the new `startIndex` query param when making the next request.
+
+        Cursor based paging may be added in the future by following [draft-peterson-scim-cursor-pagination](https://datatracker.ietf.org/doc/draft-peterson-scim-cursor-pagination/).
+      title: Schema - List Response
+      properties:
+        schemas:
+          type: array
+          items:
+            type: string
+            default: 'urn:ietf:params:scim:api:messages:2.0:ListResponse'
+            enum:
+              - 'urn:ietf:params:scim:api:messages:2.0:ListResponse'
+        Resources:
+          type: array
+          description: |-
+            A multi-valued list of complex objects containing the
+                  requested resources.  This MAY be a subset of the full set of
+                  resources if pagination (Section 3.4.2.4) is requested.  REQUIRED
+                  if "totalResults" is non-zero.
+          items:
+            type: object
+        totalResults:
+          type: integer
+          description: |-
+            The total number of results returned by the list or
+                  query operation.  The value may be larger than the number of
+                  resources returned, such as when returning a single page (see
+                  Section 3.4.2.4) of results where multiple pages are available.
+                  REQUIRED.
+        startIndex:
+          type: integer
+          minimum: 1
+          description: |-
+            The 1-based index of the first result in the current set
+                  of list results.  REQUIRED when partial results are returned due
+                  to pagination.
+        itemsPerPage:
+          type: string
+          description: |-
+            The number of resources returned in a list response
+                  page.  REQUIRED when partial results are returned due to
+                  pagination.
+      required:
+        - Resources
+        - totalResults
+    CommonResourceAttributes:
+      title: Common Resource Attributes
+      x-stoplight:
+        id: 9sqf7w852p8c7
+      type: object
+      description: |-
+        Each SCIM resource (Users, Groups, etc.) includes the following
+           common attributes.  With the exception of the "ServiceProviderConfig"
+           and "ResourceType" server discovery endpoints and their associated
+           resources, these attributes MUST be defined for all resources,
+           including any extended resource types.  When accepted by a service
+           provider (e.g., after a SCIM create), the attributes "id" and "meta"
+           (and its associated sub-attributes) MUST be assigned values by the
+           service provider.  Common attributes are considered to be part of
+           every base resource schema and do not use their own "schemas" URI.
+      properties:
+        schema:
+          type: array
+          description: |-
+            contains a list of one or more URIs that
+               indicate included SCIM schemas that are used to indicate the
+               attributes contained within a resource.  Specific information about
+               what attributes are defined within a schema MAY be obtained by
+               querying a SCIM service provider's "/Schemas" endpoint for a schema
+               definition (see Section 8.7 of [RFC7643])
+          items:
+            type: string
+        id:
+          type: string
+          description: |-
+            A unique identifier for a SCIM resource as defined by the service
+             provider.  Each representation of the resource MUST include a
+             non-empty "id" value.  This identifier MUST be unique across the
+             SCIM service provider's entire set of resources.  It MUST be a
+             stable, non-reassignable identifier that does not change when the
+             same resource is returned in subsequent requests.  The value of
+             the "id" attribute is always issued by the service provider and
+             MUST NOT be specified by the client.  The string "bulkId" is a
+             reserved keyword and MUST NOT be used within any unique identifier
+             value.  The attribute characteristics are "caseExact" as "true", a
+             mutability of "readOnly", and a "returned" characteristic of
+             "always".  See Section 9 for additional considerations regarding
+             privacy.
+          readOnly: true
+        externalId:
+          type: string
+          description: |-
+            A String that is an identifier for the resource as defined by the
+            provisioning client.  The "externalId" may simplify identification
+            of a resource between the provisioning client and the service
+            provider by allowing the client to use a filter to locate the
+            resource with an identifier from the provisioning domain,
+            obviating the need to store a local mapping between the
+            provisioning domain's identifier of the resource and the
+            identifier used by the service provider.  Each resource MAY
+            include a non-empty "externalId" value.  The value of the
+            "externalId" attribute is always issued by the provisioning client
+            and MUST NOT be specified by the service provider.  The service
+            provider MUST always interpret the externalId as scoped to the
+            provisioning domain.  While the server does not enforce
+            uniqueness, it is assumed that the value's uniqueness is
+            controlled by the client setting the value.  See Section 9 for
+            additional considerations regarding privacy.  This attribute has
+            "caseExact" as "true" and a mutability of "readWrite".  This
+            attribute is OPTIONAL.
+        meta:
+          type: object
+          description: |-
+            A complex attribute containing resource metadata.  All "meta"
+            sub-attributes are assigned by the service provider (have a
+            "mutability" of "readOnly"), and all of these sub-attributes have
+            a "returned" characteristic of "default".  This attribute SHALL be
+            ignored when provided by clients.  "meta" contains the following
+            sub-attributes:
+          properties:
+            resourceType:
+              type: string
+              description: |-
+                The name of the resource type of the resource.  This attribute has a mutability of "readOnly" and "caseExact" as "true".
+
+                When adding a resource to a specific endpoint, the meta attribute
+                   "resourceType" SHALL be set by the HTTP service provider to the
+                   corresponding resource type for the endpoint.  For example, a POST to
+                   the endpoint "/Users" will set "resourceType" to "User", and
+                   "/Groups" will set "resourceType" to "Group".
+              readOnly: true
+            created:
+              type: string
+              format: date-time
+              description: |-
+                The "DateTime" that the resource was added to the service
+                provider.  This attribute MUST be a DateTime.
+              readOnly: true
+            lastModified:
+              type: string
+              format: date-time
+              description: |-
+                The most recent DateTime that the details of this
+                resource were updated at the service provider.  If this
+                resource has never been modified since its initial creation,
+                the value MUST be the same as the value of "created".
+              readOnly: true
+            location:
+              type: string
+              format: uri
+              description: |-
+                The URI of the resource being returned.  This value MUST
+                be the same as the "Content-Location" HTTP response header (see
+                Section 3.1.4.2 of [RFC7231]).
+              readOnly: true
+            version:
+              type: string
+              description: |-
+                The version of the resource being returned.  This value
+                must be the same as the entity-tag (ETag) HTTP response header
+                (see Sections 2.1 and 2.3 of [RFC7232]).  This attribute has
+                "caseExact" as "true".  Service provider support for this
+                attribute is optional and subject to the service provider's
+                support for versioning (see Section 3.14 of [RFC7644]).  If a
+                service provider provides "version" (entity-tag) for a
+                representation and the generation of that entity-tag does not
+                satisfy all of the characteristics of a strong validator (see
+                Section 2.1 of [RFC7232]), then the origin server MUST mark the
+                "version" (entity-tag) as weak by prefixing its opaque value
+                with "W/" (case sensitive).
+              readOnly: true
+      required:
+        - id
+    DefaultMultiValueAttributes:
+      title: Default Sub-Attributes for Multi Value Attributes
+      x-stoplight:
+        id: 8b42p3ksum87k
+      type: object
+      description: |-
+        If not otherwise defined, the default set of sub-attributes for a
+           multi-valued attribute is as follows:
+      properties:
+        type:
+          type: string
+          description: |-
+            A label indicating the attribute's function, e.g., "work" or
+                  "home".
+          example: work
+        primary:
+          type: boolean
+          description: |-
+            A Boolean value indicating the 'primary' or preferred attribute
+            value for this attribute, e.g., the preferred mailing address or
+            the primary email address.  The primary attribute value "true"
+            MUST appear no more than once.  If not specified, the value of
+            "primary" SHALL be assumed to be "false".
+          default: false
+        display:
+          type: string
+          description: |-
+            A human-readable name, primarily used for display purposes and
+                  having a mutability of "immutable".
+          example: Name of user 12345
+          readOnly: true
+        value:
+          type: string
+          description: |-
+            The attribute's significant value, e.g., email address, phone
+                  number.
+          example: '12345'
+        $ref:
+          type: string
+          format: uri
+          description: |-
+            The reference URI of a target resource, if the attribute is a
+            reference.  URIs are canonicalized per Section 6.2 of [RFC3986].
+            While the representation of a resource may vary in different SCIM
+            protocol API versions (see Section 3.13 of [RFC7644]), URIs for
+            SCIM resources with an API version SHALL be considered comparable
+            to URIs without a version or with a different version.  For
+            example, "https://example.com/Users/12345" is equivalent to
+            "https://example.com/v2/Users/12345".
+          example: 'https://example.com/v2/Users/12345'
+    SchemaUserCore:
+      title: Schema - Core User
+      x-stoplight:
+        id: v26wkxsfqrmhs
+      type: object
+      description: |-
+        SCIM provides a resource type for "User" resources.  The core schema
+           for "User" is identified using the following schema URI:
+           "urn:ietf:params:scim:schemas:core:2.0:User".  The following
+           attributes are defined in addition to the core schema attributes:
+      properties:
+        userName:
+          type: string
+          description: |-
+            A service provider's unique identifier for the user, typically
+            used by the user to directly authenticate to the service provider.
+            Often displayed to the user as their unique identifier within the
+            system (as opposed to "id" or "externalId", which are generally
+            opaque and not user-friendly identifiers).  Each User MUST include
+            a non-empty userName value.  This identifier MUST be unique across
+            the service provider's entire set of Users.  This attribute is
+            REQUIRED and is case insensitive.
+        name:
+          type: object
+          description: |-
+            The components of the user's name.  Service providers MAY return
+            just the full name as a single string in the formatted
+            sub-attribute, or they MAY return just the individual component
+            attributes using the other sub-attributes, or they MAY return
+            both.  If both variants are returned, they SHOULD be describing
+            the same name, with the formatted name indicating how the
+            component attributes should be combined.
+          properties:
+            formatted:
+              type: string
+              description: |-
+                The full name, including all middle names, titles, and
+                suffixes as appropriate, formatted for display (e.g.,
+                "Ms. Barbara Jane Jensen, III").
+            familyName:
+              type: string
+              description: |-
+                The family name of the User, or last name in most
+                Western languages (e.g., "Jensen" given the full name
+                "Ms. Barbara Jane Jensen, III").
+            givenName:
+              type: string
+              description: |-
+                The given name of the User, or first name in most
+                Western languages (e.g., "Barbara" given the full name
+                "Ms. Barbara Jane Jensen, III").
+            middleName:
+              type: string
+              description: |-
+                The middle name(s) of the User (e.g., "Jane" given the
+                full name "Ms. Barbara Jane Jensen, III").
+            honorificPrefix:
+              type: string
+              description: |-
+                The honorific prefix(es) of the User, or title in
+                most Western languages (e.g., "Ms." given the full name
+                "Ms. Barbara Jane Jensen, III").
+            honorificSuffix:
+              type: string
+              description: |-
+                The honorific suffix(es) of the User, or suffix
+                in most Western languages (e.g., "III" given the full name
+                "Ms. Barbara Jane Jensen, III").
+        displayName:
+          type: string
+          description: |-
+            The name of the user, suitable for display to end-users.  Each
+            user returned MAY include a non-empty displayName value.  The name
+            SHOULD be the full name of the User being described, if known
+            (e.g., "Babs Jensen" or "Ms. Barbara J Jensen, III") but MAY be a
+            username or handle, if that is all that is available (e.g.,
+            "bjensen").  The value provided SHOULD be the primary textual
+            label by which this User is normally displayed by the service
+            provider when presenting it to end-users.
+        nickName:
+          type: string
+          description: |-
+            The casual way to address the user in real life, e.g., "Bob" or
+            "Bobby" instead of "Robert".  This attribute SHOULD NOT be used to
+            represent a User's username (e.g., bjensen or mpepperidge).
+        profileUrl:
+          type: string
+          format: uri
+          description: |-
+            A URI that is a uniform resource locator (as defined in
+            Section 1.1.3 of [RFC3986]) and that points to a location
+            representing the user's online profile (e.g., a web page).  URIs
+            are canonicalized per Section 6.2 of [RFC3986].
+        title:
+          type: string
+          description: 'The user''s title, such as "Vice President".'
+        userType:
+          type: string
+          description: |-
+            Used to identify the relationship between the organization and the
+            user.  Typical values used might be "Contractor", "Employee",
+            "Intern", "Temp", "External", and "Unknown", but any value may be
+            used.
+        preferredLanguage:
+          type: string
+          description: |-
+            Indicates the user's preferred written or spoken languages and is
+            generally used for selecting a localized user interface.  The
+            value indicates the set of natural languages that are preferred.
+            The format of the value is the same as the HTTP Accept-Language
+            header field (not including "Accept-Language:") and is specified
+            in Section 5.3.5 of [RFC7231].  The intent of this value is to
+            enable cloud applications to perform matching of language tags
+            [RFC4647] to the user's language preferences, regardless of what
+            may be indicated by a user agent (which might be shared), or in an interaction that does not involve a user (such as in a delegated
+            OAuth 2.0 [RFC6749] style interaction) where normal HTTP
+            Accept-Language header negotiation cannot take place.
+        locale:
+          type: string
+          description: |-
+            Used to indicate the User's default location for purposes of
+            localizing such items as currency, date time format, or numerical
+            representations.  A valid value is a language tag as defined in
+            [RFC5646].  Computer languages are explicitly excluded.
+
+            A language tag is a sequence of one or more case-insensitive
+            sub-tags, each separated by a hyphen character ("-", %x2D).  For
+            backward compatibility, servers MAY accept tags separated by an
+            underscore character ("_", %x5F).  In most cases, a language tag
+            consists of a primary language sub-tag that identifies a broad
+            family of related languages (e.g., "en" = English) and that is
+            optionally followed by a series of sub-tags that refine or narrow
+            that language's range (e.g., "en-CA" = the variety of English as
+            communicated in Canada).  Whitespace is not allowed within a 
+            language tag.  
+
+            Example tags include: fr, en-US, es-419, az-Arab, x-pig-latin, man-Nkoo-GN
+
+            See [RFC5646] for further information.
+        timezone:
+          type: string
+          description: |-
+            The User's time zone, in IANA Time Zone database format [RFC6557],
+                  also known as the "Olson" time zone database format [Olson-TZ]
+                  (e.g., "America/Los_Angeles").
+        active:
+          type: boolean
+          description: |-
+            A Boolean value indicating the user's administrative status.  The
+            definitive meaning of this attribute is determined by the service
+            provider.  As a typical example, a value of true implies that the
+            user is able to log in, while a value of false implies that the
+            user's account has been suspended.
+        password:
+          type: string
+          description: |
+            This attribute is intended to be used as a means to set, replace,
+            or compare (i.e., filter for equality) a password.  The cleartext
+            value or the hashed value of a password SHALL NOT be returnable by
+            a service provider.  If a service provider holds the value
+            locally, the value SHOULD be hashed.  When a password is set or
+            changed by the client, the cleartext password SHOULD be processed
+            by the service provider as follows:
+
+            *  Prepare the cleartext value for international language
+                comparison.  See Section 7.8 of [RFC7644].
+
+            *  Validate the value against server password policy.  Note: The
+                definition and enforcement of password policy are beyond the
+                scope of this document.
+
+            *  Ensure that the value is encrypted (e.g., hashed).  See
+                Section 9.2 for acceptable hashing and encryption handling when
+                storing or persisting for provisioning workflow reasons.
+
+            A service provider that immediately passes the cleartext value on
+            to another system or programming interface MUST pass the value
+            directly over a secured connection (e.g., Transport Layer Security
+            (TLS)).  If the value needs to be temporarily persisted for a
+            period of time (e.g., because of a workflow) before provisioning,
+            then the value MUST be protected by some method, such as
+            encryption.
+
+            Testing for an equality match MAY be supported if there is an
+            existing stored hashed value.  When testing for equality, the
+            service provider:
+
+            *  Prepares the filter value for international language
+                comparison.  See Section 7.8 of [RFC7644].
+
+            *  Generates the salted hash of the filter value and tests for a
+                match with the locally held value.
+
+            The mutability of the password attribute is "writeOnly",
+            indicating that the value MUST NOT be returned by a service
+            provider in any form (the attribute characteristic "returned" is
+            "never").
+          writeOnly: true
+        emails:
+          type: array
+          description: |-
+            Email addresses for the User.  The value SHOULD be specified
+            according to [RFC5321].  Service providers SHOULD canonicalize the
+            value according to [RFC5321], e.g., "bjensen@example.com" instead
+            of "bjensen@EXAMPLE.COM".  The "display" sub-attribute MAY be used
+            to return the canonicalized representation of the email value.
+            The "type" sub-attribute is used to provide a classification
+            meaningful to the (human) user.  The user interface should
+            encourage the use of basic values of "work", "home", and "other"
+            and MAY allow additional type values to be used at the discretion
+            of SCIM clients.
+          items:
+            $ref: '#/components/schemas/DefaultMultiValueAttributes'
+        phoneNumbers:
+          type: array
+          description: |-
+            Phone numbers for the user.  The value SHOULD be specified
+            according to the format defined in [RFC3966], e.g.,
+            'tel:+1-201-555-0123'.  Service providers SHOULD canonicalize the
+            value according to [RFC3966] format, when appropriate.  The
+            "display" sub-attribute MAY be used to return the canonicalized
+            representation of the phone number value.  The sub-attribute
+            "type" often has typical values of "work", "home", "mobile",
+            "fax", "pager", and "other" and MAY allow more types to be defined
+            by the SCIM clients.
+          items:
+            $ref: '#/components/schemas/DefaultMultiValueAttributes'
+        ims:
+          type: array
+          description: |-
+            Instant messaging address for the user.  No official
+            canonicalization rules exist for all instant messaging addresses,
+            but service providers SHOULD, when appropriate, remove all
+            whitespace and convert the address to lowercase.  The "type"
+            sub-attribute SHOULD take one of the following values: "aim",
+            "gtalk", "icq", "xmpp", "msn", "skype", "qq", "yahoo", or "other"
+            (representing currently popular IM services at the time of this
+            writing).  Service providers MAY add further values if new IM
+            services are introduced and MAY specify more detailed
+            canonicalization rules for each possible value.
+          items:
+            $ref: '#/components/schemas/DefaultMultiValueAttributes'
+        photos:
+          type: array
+          description: |-
+            A URI that is a uniform resource locator (as defined in
+            Section 1.1.3 of [RFC3986]) that points to a resource location
+            representing the user's image.  The resource MUST be a file (e.g.,
+            a GIF, JPEG, or PNG image file) rather than a web page containing
+            an image.  Service providers MAY return the same image in
+            different sizes, although it is recognized that no standard for
+            describing images of various sizes currently exists.  Note that
+            this attribute SHOULD NOT be used to send down arbitrary photos
+            taken by this user; instead, profile photos of the user that are
+            suitable for display when describing the user should be sent.
+            Instead of the standard canonical values for type, this attribute
+            defines the following canonical values to represent popular photo
+            sizes: "photo" and "thumbnail".
+          items:
+            $ref: '#/components/schemas/DefaultMultiValueAttributes'
+        addresses:
+          type: array
+          description: |-
+            A physical mailing address for this user.  Canonical type values
+            of "work", "home", and "other".  This attribute is a complex type
+            with the following sub-attributes.  All sub-attributes are
+            OPTIONAL.
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+                description: |-
+                  Canonical type values
+                        of "work", "home", and "other".
+                enum:
+                  - work
+                  - home
+                  - other
+              formatted:
+                type: string
+                description: |-
+                  The full mailing address, formatted for display or use
+                           with a mailing label.  This attribute MAY contain newlines.
+              streetAddress:
+                type: string
+                description: |-
+                  The full street address component, which may
+                  include house number, street name, P.O. box, and multi-line
+                  extended street address information.  This attribute MAY
+                  contain newlines.
+                           
+              locality:
+                type: string
+                description: The city or locality component.
+              region:
+                type: string
+                description: The state or region component.
+              postalCode:
+                type: string
+                description: The zip code or postal code component.
+              country:
+                type: string
+                description: |-
+                  The country name component.  When specified, the value
+                  MUST be in ISO 3166-1 "alpha-2" code format [ISO3166]; e.g.,
+                  the United States and Sweden are "US" and "SE", respectively.
+        groups:
+          type: array
+          description: |-
+            A list of groups to which the user belongs, either through direct
+            membership, through nested groups, or dynamically calculated.  The
+            values are meant to enable expression of common group-based or
+            role-based access control models, although no explicit
+            authorization model is defined.  It is intended that the semantics
+            of group membership and any behavior or authorization granted as a
+            result of membership are defined by the service provider.  The
+            canonical types "direct" and "indirect" are defined to describe
+            how the group membership was derived.  Direct group membership
+            indicates that the user is directly associated with the group and
+            SHOULD indicate that clients may modify membership through the
+            "Group" resource.  Indirect membership indicates that user
+            membership is transitive or dynamic and implies that clients
+            cannot modify indirect group membership through the "Group"
+            resource but MAY modify direct group membership through the
+            "Group" resource, which may influence indirect memberships.  If
+            the SCIM service provider exposes a "Group" resource, the "value"
+            sub-attribute MUST be the "id", and the "$ref" sub-attribute must
+            be the URI of the corresponding "Group" resources to which the
+            user belongs.  Since this attribute has a mutability of
+            "readOnly", group membership changes MUST be applied via the
+            "Group" Resource (Section 4.2).  This attribute has a mutability
+            of "readOnly".
+          items:
+            $ref: '#/components/schemas/DefaultMultiValueAttributes'
+          readOnly: true
+        entitlements:
+          type: array
+          description: |-
+            A list of entitlements for the user that represent a thing the
+            user has.  An entitlement may be an additional right to a thing,
+            object, or service.  No vocabulary or syntax is specified; service
+            providers and clients are expected to encode sufficient
+            information in the value so as to accurately and without ambiguity
+            determine what the user has access to.  This value has no
+            canonical types, although a type may be useful as a means to scope
+            entitlements.
+          items:
+            $ref: '#/components/schemas/DefaultMultiValueAttributes'
+        roles:
+          type: array
+          description: |-
+            A list of roles for the user that collectively represent who the
+            user is, e.g., "Student", "Faculty".  No vocabulary or syntax is
+            specified, although it is expected that a role value is a String
+            or label representing a collection of entitlements.  This value
+            has no canonical types.
+          items:
+            $ref: '#/components/schemas/DefaultMultiValueAttributes'
+        x509Certificates:
+          type: array
+          description: |-
+            A list of certificates associated with the resource (e.g., a
+            User).  Each value contains exactly one DER-encoded X.509
+            certificate (see Section 4 of [RFC5280]), which MUST be base64
+            encoded per Section 4 of [RFC4648].  A single value MUST NOT
+            contain multiple certificates and so does not contain the encoding
+            "SEQUENCE OF Certificate" in any guise.
+          items:
+            $ref: '#/components/schemas/DefaultMultiValueAttributes'
+      required:
+        - userName
+    SchemaUserEnterprise:
+      title: Schema - Enterprise User
+      x-stoplight:
+        id: 2c38f935be5f4
+      type: object
+      properties:
+        'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User':
+          type: object
+          description: |-
+            This complex attribute will only appear in resources that have opted into the enterprise user extension.
+
+            The following SCIM extension defines attributes commonly used in
+            representing users that belong to, or act on behalf of, a business or
+            enterprise.  The enterprise User extension is identified using the
+            following schema URI:
+            "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User".
+          properties:
+            employeeNumber:
+              type: string
+              description: |-
+                A string identifier, typically numeric or alphanumeric, assigned
+                to a person, typically based on order of hire or association with
+                an organization.
+            costCenter:
+              type: string
+              description: Identifies the name of a cost center.
+            organization:
+              type: string
+              description: Identifies the name of an organization.
+            division:
+              type: string
+              description: Identifies the name of a division.
+            department:
+              type: string
+              description: Identifies the name of a department.
+            manager:
+              type: object
+              description: |-
+                The user's manager.  A complex type that optionally allows service
+                providers to represent organizational hierarchy by referencing the
+                "id" attribute of another User.
+              properties:
+                value:
+                  type: string
+                  description: |-
+                    The "id" of the SCIM resource representing the user's
+                    manager.  RECOMMENDED.
+                $ref:
+                  type: string
+                  description: |-
+                    The URI of the SCIM resource representing the User's
+                    manager.  RECOMMENDED.
+                displayName:
+                  type: string
+                  description: |
+                    The displayName of the user's manager.  This
+                    attribute is OPTIONAL, and mutability is "readOnly".
+                  readOnly: true
+    ResourceUser:
+      allOf:
+        - $ref: '#/components/schemas/CommonResourceAttributes'
+        - $ref: '#/components/schemas/SchemaUserCore'
+        - $ref: '#/components/schemas/SchemaUserEnterprise'
+        - type: object
+          properties:
+            schema:
+              type: array
+              example:
+                - 'urn:ietf:params:scim:schemas:core:2.0:User'
+                - 'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'
+              items:
+                type: string
+      description: 'Each resource is comprised of the common attributes, a base schema where the attributes are at the root level and an unlimited number of extensions schemas where the extension attributes are nested within the extension schema id. The schema id for the base and all entensions used must be listed in the schema attribute.'
+      title: Resource - User with enterprise extension
+      x-stoplight:
+        id: a8ef53fb244e9
+  responses:
+    error:
+      description: 'https://www.rfc-editor.org/rfc/rfc7644#section-3.12 details the expected values along with some tables describing their usage.'
+      headers:
+        Content-Type:
+          $ref: '#/components/headers/Content-Type'
+      content:
+        application/scim+json:
+          schema:
+            type: object
+            properties:
+              schemas:
+                type: array
+                description: Documents that the error response contains the core error message attributes
+                items:
+                  type: string
+                  enum:
+                    - 'urn:ietf:params:scim:api:messages:2.0:Error'
+                  default: 'urn:ietf:params:scim:api:messages:2.0:Error'
+              status:
+                type: string
+                description: |-
+                  The HTTP status code that represents the error.
+
+                  | Status                      | Applicability                 | Suggested Explanation                                                                                                                                                                                                                                       |
+                  |-----------------------------|-------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+                  | 307 (Temporary Redirect)    | GET, POST, PUT, PATCH, DELETE | The client is directed to repeat the same HTTP request at the location identified.  The client SHOULD NOT use the location provided in the response as a permanent reference to the resource and SHOULD continue to use the original request URI [RFC7231]. |
+                  | 308 (Permanent Redirect)    | GET, POST, PUT, PATCH, DELETE | The client is directed to repeat the same HTTP request at the location identified.  The client SHOULD use the location provided in the response as the permanent reference to the resource [RFC7538].                                                       |
+                  | 400 (Bad Request)           | GET, POST, PUT, PATCH, DELETE | Request is unparsable, syntactically incorrect, or violates schema.                                                                                                                                                                                         |
+                  | 401 (Unauthorized)          | GET, POST, PUT, PATCH, DELETE | Authorization failure.  The authorization header is invalid or missing.                                                                                                                                                                                     |
+                  | 403 (Forbidden)             | GET, POST, PUT, PATCH, DELETE | Operation is not permitted based on the supplied authorization.                                                                                                                                                                                             |
+                  | 404 (Not Found)             | GET, POST, PUT, PATCH, DELETE | Specified resource (e.g., User) or endpoint does not exist.                                                                                                                                                                                                 |
+                  | 409 (Conflict)              | POST, PUT, PATCH, DELETE      | The specified version number does not match the resource's latest version number, or a service provider refused to create a new, duplicate resource.                                                                                                        |
+                  | 412 (Precondition Failed)   | PUT, PATCH, DELETE            | Failed to update.  Resource has changed on the server.                                                                                                                                                                                                      |
+                  | 413 (Payload Too Large)     | POST                          | {"maxOperations": 1000,"maxPayloadSize": 1048576}                                                                                                                                                                                                           |
+                  | 500 (Internal Server Error) | GET, POST, PUT, PATCH, DELETE | An internal error.  Implementers SHOULD provide descriptive debugging advice.                                                                                                                                                                               |
+                  | 501 (Not Implemented)       | GET, POST, PUT, PATCH, DELETE | Service provider does not support the request operation, e.g., PATCH.                                                                                                                                                                                       |
+                pattern: '^[2-5][0-9][0-9]$'
+              scimType:
+                type: string
+                description: |-
+                  The status field is used to documment a more specific error category than the HTTP status codes support. For status code 400 there is a list of predefined options. Implementations may add additional ones.
+
+                  | scimType             | Description                                                                                                                                                                                                                                             | Applicability                                                                                     |   |   |
+                  |----------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------|---|---|
+                  | invalidFilter        | The specified filter syntax was invalid (does not comply with Figure 1), or the specified attribute and filter comparison combination is not supported.                                                                                                 | GET (Section 3.4.2), POST (Search - Section 3.4.3), PATCH (Path Filter - Section 3.5.2)           |   |   |
+                  | tooMany              | The specified filter yields many more results than the server is willing to calculate or process.  For example a filter such as "(userName pr)" by itself would return all entries with a "userName" and MAY not be acceptable to the service provider. | GET (Section 3.4.2), POST (Search - Section 3.4.3)                                                |   |   |
+                  | uniqueness           | One or more of the attribute values are already in use or are reserved.                                                                                                                                                                                 | POST (Create - Section 3.3), PUT (Section 3.5.1), PATCH (Section 3.5.2)                           |   |   |
+                  | mutability           | The attempted modification is not compatible with the target attribute's mutability or current state (e.g. modification of an "immutable" attribute with an existing value).                                                                            | PUT (Section 3.5.1), PATCH (Section 3.5.2)                                                        |   |   |
+                  | invalidSyntax        | The request body message structure was invalid or did not conform to the request schema.                                                                                                                                                                | POST (Search - Section 3.4.3, Create - Section 3.3, Bulk - Section 3.7), PUT (Section 3.5.1)      |   |   |
+                  | invalidPath noTarget | The `path` attribute was invalid or malformed (see Figure 7).                                                                                                                                                                                           | PATCH (Section 3.5.2)                                                                             |   |   |
+                  | noTarget             | The specified "path" did not yield an attribute or attribute value that could be operated on.  This occurs when the specified "path" value contains a filter that yields no match.                                                                      | PATCH (Section 3.5.2)                                                                             |   |   |
+                  | invalidValue         | A required value was missing, or the value specified was not compatible with the operation or attribute type (see Section 2.2 of [RFC7643]), or resource schema (see Section 4 of [RFC7643]).                                                           | GET (Section 3.4.2), POST (Create - Section 3.3, PATCH (Section 3.5.2)                            |   |   |
+                  | invalidVers          | The specified SCIM protocol version is not supported (see Section 3.13).                                                                                                                                                                                | GET (Section 3.4.2), POST (ALL), PUT (Section 3.5.1), PATCH (Section 3.5.2), DELETE (Section 3.6) |   |   |
+                  | sensitive            | The specified request cannot be completed, due to the passing of sensitive (e.g., personal) information in a request URI.  For example, personal information SHALL NOT be transmitted over request URIs.  See Section 7.5.2.                            | GET (Section 3.4.2)                                                                               |   |   |
+              detail:
+                type: string
+                description: A detailed human-readable message.  OPTIONAL.
+            required:
+              - schemas
+              - status
+    error-uniqueness:
+      description: Another resouce exists with the same key attributes
+      headers:
+        Content-Type:
+          $ref: '#/components/headers/Content-Type'
+      content:
+        application/scim+json:
+          schema:
+            type: object
+            properties:
+              schemas:
+                type: array
+                description: Documents that the error response contains the core error message attributes
+                items:
+                  type: string
+                  enum:
+                    - 'urn:ietf:params:scim:api:messages:2.0:Error'
+                  default: 'urn:ietf:params:scim:api:messages:2.0:Error'
+              status:
+                type: string
+                description: The HTTP status code that represents the error. This will always be 409 Conflict
+                default: '409'
+              scimType:
+                type: string
+                description: Will always be `uniqueness` - One or more of the attribute values are already in use or are reserved.
+                default: uniqueness
+              detail:
+                type: string
+                description: A detailed human-readable message.  OPTIONAL.
+                example: The userName of "myCoolUser" is already in use or are reserved.
+            required:
+              - schemas
+              - status
+    ResourceUsers:
+      description: |-
+        Creating, replacing and modifying a resoruce all return the same response.
+
+        It will include any modifications to the data made by the service provider.
+      content:
+        application/scim+json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ResourceUser'
+      headers:
+        Location:
+          $ref: '#/components/headers/Location'
+        ETag:
+          $ref: '#/components/headers/ETag'
+        Content-Type:
+          $ref: '#/components/headers/Content-Type'
+  requestBodies: {}
+paths:
+  /Users:
+    get:
+      summary: Query Users
+      tags:
+        - Core Resources
+      operationId: get-Users
+      parameters:
+        - $ref: '#/components/parameters/attributes'
+        - $ref: '#/components/parameters/filter'
+        - $ref: '#/components/parameters/sortBy'
+        - $ref: '#/components/parameters/sortOrder'
+        - $ref: '#/components/parameters/startIndex'
+        - $ref: '#/components/parameters/count'
+        - $ref: '#/components/parameters/excludedAttributes'
+        - $ref: '#/components/parameters/Accept'
+      description: |-
+        The list of possible query params is the same as the fields in the body of a `.search` request. See it for details.
+
+        A query that does not return any matches SHALL return success (HTTP status code 200) with "totalResults" set to a value of 0.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/scim+json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SchemaListResponse'
+                  - type: object
+                    properties:
+                      Resources:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ResourceUser'
+        default:
+          $ref: '#/components/responses/error'
+    post:
+      summary: Create User
+      operationId: post-Users
+      responses:
+        '201':
+          $ref: '#/components/responses/ResourceUsers'
+        '409':
+          $ref: '#/components/responses/error-uniqueness'
+        default:
+          $ref: '#/components/responses/error'
+      tags:
+        - Core Resources
+      parameters:
+        - $ref: '#/components/parameters/Content-Type'
+        - $ref: '#/components/parameters/attributes'
+        - $ref: '#/components/parameters/excludedAttributes'
+        - $ref: '#/components/parameters/Accept'
+      requestBody:
+        content:
+          application/scim+json:
+            schema:
+              $ref: '#/components/schemas/ResourceUser'
+        description: |-
+          Successfully creating a user will respond with status code 201.
+
+          If the service provider determines that the creation of the requested
+          resource conflicts with existing resources (e.g., a "User" resource
+          with a duplicate "userName"), the service provider MUST return HTTP
+          status code 409 (Conflict) with a "scimType" error code of "uniqueness"
+      description: ''
+  '/Users/{id}':
+    parameters:
+      - schema:
+          type: string
+        name: id
+        in: path
+        required: true
+    get:
+      summary: Retrieve User
+      tags:
+        - Core Resources
+      responses:
+        '200':
+          $ref: '#/components/responses/ResourceUsers'
+        '404':
+          description: Not Found
+        default:
+          $ref: '#/components/responses/error'
+      operationId: get-Users-id
+      description: |-
+        To retrieve a known resource, clients send GET requests to the
+           resource endpoint, e.g., "/Users/{id}", "/Groups/{id}", or
+           "/Schemas/{id}", where "{id}" is a resource identifier (for example,
+           the value of the "id" attribute).
+           
+        If the resource exists, the server responds with HTTP status code 200
+           (OK) and includes the result in the body of the response.
+      parameters:
+        - $ref: '#/components/parameters/Accept'
+        - $ref: '#/components/parameters/attributes'
+        - $ref: '#/components/parameters/excludedAttributes'
+    put:
+      summary: Replace User
+      operationId: put-Users-id
+      responses:
+        '200':
+          $ref: '#/components/responses/ResourceUsers'
+        default:
+          $ref: '#/components/responses/error'
+      tags:
+        - Core Resources
+      requestBody:
+        content:
+          application/scim+json:
+            schema:
+              type: object
+              properties: {}
+      parameters:
+        - $ref: '#/components/parameters/Content-Type'
+        - $ref: '#/components/parameters/Accept'
+    patch:
+      summary: Modify User
+      operationId: patch-Users-id
+      responses:
+        '200':
+          $ref: '#/components/responses/ResourceUsers'
+        default:
+          $ref: '#/components/responses/error'
+      tags:
+        - Core Resources
+      requestBody:
+        content:
+          application/scim+json:
+            schema:
+              type: object
+              properties: {}
+      parameters:
+        - $ref: '#/components/parameters/Content-Type'
+        - $ref: '#/components/parameters/Accept'
+        - $ref: '#/components/parameters/attributes'
+        - $ref: '#/components/parameters/excludedAttributes'
+    delete:
+      summary: Delete User
+      operationId: delete-Users-id
+      responses:
+        '200':
+          description: OK
+        default:
+          $ref: '#/components/responses/error'
+      tags:
+        - Core Resources
+  /Groups:
+    get:
+      summary: Your GET endpoint
+      tags:
+        - Core Resources
+      responses: {}
+      operationId: get-Groups
+  '/Groups/{id}':
+    parameters:
+      - schema:
+          type: string
+        name: id
+        in: path
+        required: true
+    get:
+      summary: Your GET endpoint
+      tags:
+        - Core Resources
+      responses: {}
+      operationId: get-Groups-id
+  /Me:
+    get:
+      summary: Your GET endpoint
+      tags:
+        - Core Resources
+      responses: {}
+      operationId: get-Me
+    put:
+      summary: ''
+      operationId: put-Me
+      responses:
+        '200':
+          description: OK
+    patch:
+      summary: ''
+      operationId: patch-Me
+      responses:
+        '200':
+          description: OK
+    delete:
+      summary: ''
+      operationId: delete-Me
+      responses:
+        '200':
+          description: OK
+  /ServiceProviderConfig:
+    get:
+      summary: Retrieve Service Provider Configuration
+      tags:
+        - Core Service Data
+      responses: {}
+      operationId: get-ServiceProviderConfig
+      description: Retrieve service provider's configuration
+  /ResourceTypes:
+    get:
+      summary: Query Resource Types
+      tags:
+        - Core Service Data
+      responses: {}
+      operationId: get-ResourceTypes
+      description: Retrieve supported resource types
+  '/ResourceTypes/{id}':
+    get:
+      summary: Retrieve Resource Type
+      tags:
+        - Core Service Data
+      responses: {}
+      operationId: get-ResourceTypes-id
+    parameters:
+      - schema:
+          type: string
+        name: id
+        in: path
+        required: true
+  /Schemas:
+    get:
+      summary: Query schemas
+      tags:
+        - Core Service Data
+      responses: {}
+      operationId: get-Schemas
+      description: |-
+        Retrieve supported schemas
+
+        SCIM message schemas using the `urn:ietf:params:scim:api:` prefix URN SHALL NOT
+           be discoverable using the `/Schemas` endpoint. (Section 3.1)
+  '/Schemas/{id}':
+    parameters:
+      - schema:
+          type: string
+        name: id
+        in: path
+        required: true
+    get:
+      summary: Retrieve schemas
+      tags:
+        - Core Service Data
+      responses: {}
+      operationId: get-Schemas-id
+  /Bulk:
+    post:
+      summary: Bulk Operations
+      operationId: post-Bulk
+      responses:
+        '200':
+          description: OK
+  /.search:
+    post:
+      summary: Search
+      operationId: post-.search
+      responses:
+        '200':
+          description: OK
+      description: |-
+        You may also add `/.search` to the end of any other path to enable doing the search action against that resource using POST instead of the standard GET.
+
+        A query against a server root indicates that all resources within the
+         server SHALL be included, subject to filtering.  A filter expression
+         using "meta.resourceType" MAY be used to restrict results to one or
+         more specific resource types (to exclude others).  For example:
+
+         `filter=(meta.resourceType eq User) or (meta.resourceType eq Group)`
+
+         If a SCIM service provider determines that too many results would be
+         returned (e.g., because a client queried a resource type endpoint or
+         the server base URI), the server SHALL reject the request by
+         returning an HTTP response with HTTP status code 400 (Bad Request)
+         and JSON attribute "scimType" set to "tooMany" (see Table 9).
+
+         When processing query operations using endpoints that include more
+         than one SCIM resource type (e.g., a query from the server root
+         endpoint), filters MUST be processed as outlined in Section 3.4.2.2.
+         For filtered attributes that are not part of a particular resource
+         type, the service provider SHALL treat the attribute as if there is
+         no attribute value.  For example, a presence or equality filter for
+         an undefined attribute evaluates to false.
+tags:
+  - name: Core Resources
+  - name: Core Service Data
